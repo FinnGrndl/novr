@@ -4,6 +4,8 @@
   <PropertyGroup>
     <BuildOutputDir Condition="'$(BuildOutputDir)' == ''">$(MSBuildThisFileDirectory)build-output</BuildOutputDir>
     <NuclearOptionFallbackLibDir>$(MSBuildThisFileDirectory)lib/mono/modern</NuclearOptionFallbackLibDir>
+    <NuclearOptionSolutionLocalReferenceExcludes>Unity.XR.Management.dll;Unity.XR.OpenXR.dll;Unity.XR.OpenVR.dll</NuclearOptionSolutionLocalReferenceExcludes>
+    <NuclearOptionFallbackLibExcludes>$(NuclearOptionFallbackLibDir)/Unity.XR.Management.dll;$(NuclearOptionFallbackLibDir)/Unity.XR.OpenXR.dll;$(NuclearOptionFallbackLibDir)/Unity.XR.OpenVR.dll</NuclearOptionFallbackLibExcludes>
     <DefaultItemExcludes>$(DefaultItemExcludes);**/C:/**;$(MSBuildThisFileDirectory)build-output/**</DefaultItemExcludes>
     <DefaultExcludesInProjectFolder>$(DefaultExcludesInProjectFolder);**/C:/**;$(MSBuildThisFileDirectory)build-output/**</DefaultExcludesInProjectFolder>
     <DefineConstants>$(DefineConstants);MONO;MODERN</DefineConstants>

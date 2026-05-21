@@ -2,7 +2,6 @@
 using System.Reflection;
 using BepInEx;
 using HarmonyLib;
-using NOVR.Profiling;
 using NOVR.VrCamera;
 using NOVR.VrUi;
 using NOVR.VrUi.SpecialBehavior;

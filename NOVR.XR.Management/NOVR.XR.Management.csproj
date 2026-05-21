@@ -16,7 +16,7 @@
     </PropertyGroup>
 
     <ItemGroup Condition=" '$(NuclearOptionGameDirResolved)' == 'NUCLEAR_OPTION_NOT_FOUND' ">
-        <Reference Include="$(NuclearOptionFallbackLibDir)/*.dll">
+        <Reference Include="$(NuclearOptionFallbackLibDir)/*.dll" Exclude="$(NuclearOptionFallbackLibExcludes)">
             <Private>False</Private>
         </Reference>
     </ItemGroup>
