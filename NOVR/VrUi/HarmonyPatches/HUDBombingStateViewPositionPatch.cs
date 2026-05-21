@@ -7,8 +7,6 @@ namespace NOVR.VrUi.HarmonyPatches;
 
 internal static class HUDBombingStateViewPositionPatch
 {
-    private const float HudDistance = 1000.0f;
-
     private static readonly FieldInfo AlignmentBarField = AccessTools.Field(typeof(global::HUDBombingState), "alignmentBar");
     private static readonly FieldInfo CcipPipperField = AccessTools.Field(typeof(global::HUDBombingState), "ccipPipper");
     private static readonly FieldInfo CcipLineField = AccessTools.Field(typeof(global::HUDBombingState), "ccipLine");
@@ -55,15 +53,15 @@ internal static class HUDBombingStateViewPositionPatch
         var upperWorldPosition = averageTargetPosition.ToLocalPosition() + Vector3.up * verticalOffset;
         var lowerWorldPosition = averageTargetPosition.ToLocalPosition() + Vector3.up * verticalOffset * 0.9f;
 
-        if (!TryProjectToCockpitHud(upperWorldPosition, out var upperHudPosition) ||
-            !TryProjectToCockpitHud(lowerWorldPosition, out var lowerHudPosition))
+        if (!VrHudProjection.TryProjectToCockpitHud(upperWorldPosition, out var upperHudPosition) ||
+            !VrHudProjection.TryProjectToCockpitHud(lowerWorldPosition, out var lowerHudPosition))
         {
             alignmentBar.gameObject.SetActive(false);
             return;
         }
 
         alignmentBar.transform.position = upperHudPosition;
-        alignmentBar.transform.rotation = GetRotationAlongHudSegment(upperHudPosition, lowerHudPosition, cockpitHudCamera);
+        alignmentBar.transform.rotation = VrHudProjection.GetRotationAlongHudSegment(upperHudPosition, lowerHudPosition, cockpitHudCamera);
 
         if (ccrpCircle != null)
             ccrpCircle.transform.rotation = cockpitHudCamera.transform.rotation;
@@ -87,7 +85,7 @@ internal static class HUDBombingStateViewPositionPatch
 
         var ccipImpactPointSmoothed = (Vector3)CcipImpactPointSmoothedField.GetValue(state);
         var impactWorldPosition = ccipImpactPointSmoothed + Datum.origin.position;
-        if (!TryProjectToCockpitHud(impactWorldPosition, out var pipperHudPosition))
+        if (!VrHudProjection.TryProjectToCockpitHud(impactWorldPosition, out var pipperHudPosition))
         {
             ccipPipper.enabled = false;
             ccipLine.enabled = false;
@@ -106,8 +104,8 @@ internal static class HUDBombingStateViewPositionPatch
         }
 
         var normalizedLineDirection = lineDirection.normalized;
-        var lineStart = pipperHudPosition + normalizedLineDirection * 22.0f;
-        var lineEnd = velocityHudPosition - normalizedLineDirection * 8.0f;
+        var lineStart = pipperHudPosition + normalizedLineDirection * VrHudProjection.ReferencePixelsToHudDistance(22.0f);
+        var lineEnd = velocityHudPosition - normalizedLineDirection * VrHudProjection.ReferencePixelsToHudDistance(8.0f);
         var lineVector = lineEnd - lineStart;
         if (Vector3.Dot(lineDirection, lineVector) < 0.0f)
         {
@@ -115,38 +113,10 @@ internal static class HUDBombingStateViewPositionPatch
             return;
         }
 
-        ccipLine.transform.position = lineStart;
-        ccipLine.transform.rotation = Quaternion.LookRotation(
-            cockpitHudCamera.transform.forward,
-            lineVector.sqrMagnitude > Mathf.Epsilon ? lineVector.normalized : cockpitHudCamera.transform.up);
-        ccipLine.transform.localScale = new Vector3(1.0f, lineVector.magnitude, 1.0f);
+        VrHudProjection.SetVerticalLine(ccipLine.transform, lineStart, lineEnd, cockpitHudCamera);
 
         if (ccipFallTime != null)
             ccipFallTime.transform.rotation = cockpitHudCamera.transform.rotation;
     }
 
-    private static Quaternion GetRotationAlongHudSegment(Vector3 start, Vector3 end, Camera cockpitHudCamera)
-    {
-        var segment = end - start;
-        if (segment.sqrMagnitude <= Mathf.Epsilon)
-            return cockpitHudCamera.transform.rotation;
-
-        return Quaternion.LookRotation(cockpitHudCamera.transform.forward, segment.normalized);
-    }
-
-    private static bool TryProjectToCockpitHud(Vector3 worldPosition, out Vector3 hudPosition)
-    {
-        hudPosition = Vector3.zero;
-        var mainCamera = EventBus.MainCamera;
-        var cockpitHudCamera = EventBus.CockpitHudCamera;
-        if (mainCamera == null || cockpitHudCamera == null)
-            return false;
-
-        var mainCameraLocal = mainCamera.transform.InverseTransformPoint(worldPosition);
-        if (mainCameraLocal.z <= 0.0f)
-            return false;
-
-        hudPosition = cockpitHudCamera.transform.TransformPoint(mainCameraLocal).normalized * HudDistance;
-        return true;
-    }
 }

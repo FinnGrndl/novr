@@ -9,14 +9,6 @@ namespace NOVR.VrUi.HarmonyPatches;
 // Ensures our hud markers are in our VR UI camera's space
 internal static class HUDUnitMarkerViewPositionPatch
 { 
-    private static readonly global::GlobalPosition ZeroViewPosition = new(0f, 0f, 0f);
-    private const BindingFlags InstanceFieldFlags = BindingFlags.Instance | BindingFlags.NonPublic;
-    private const float HudDistance = 1000.0f;
-    private const float VrViewportHorizontalDegrees = 50.0f;
-    private const float VrViewportVerticalDegrees = 50.0f;
-    private const float VrViewportHalfHorizontalDegrees = VrViewportHorizontalDegrees * 0.5f;
-    private const float VrViewportHalfVerticalDegrees = VrViewportVerticalDegrees * 0.5f;
-    
     private static readonly FieldInfo HiddenField = AccessTools.Field(typeof(global::HUDUnitMarker), "hidden");
     private static readonly FieldInfo TransformField = AccessTools.Field(typeof(global::HUDUnitMarker), "_transform");
     private static readonly FieldInfo IconField = AccessTools.Field(typeof(global::HUDUnitMarker), "icon");
@@ -45,14 +37,15 @@ internal static class HUDUnitMarkerViewPositionPatch
 
             var realCameraPosition = mainCamera.transform.GlobalPosition();
             var realCameraForward = mainCamera.transform.forward;
-            var screenSpacePosition = screenSpaceCamera.transform.GlobalPosition();
-            var screenSpaceForward = screenSpaceCamera.transform.forward;
-
             GetTransform(__instance).rotation = screenSpaceCamera.transform.rotation;
+            
+            
+            
+            
             var targetInfo = (Text)TargetInfoField.GetValue(SceneSingleton<CombatHUD>.i);
             if (targetInfo != null)
             {
-                targetInfo.transform.rotation =screenSpaceCamera.transform.rotation;
+                targetInfo.transform.rotation = screenSpaceCamera.transform.rotation;
             }
             
             if (GetHidden(__instance))
@@ -62,20 +55,18 @@ internal static class HUDUnitMarkerViewPositionPatch
               return false;
             if (__instance.selected)
             {
-              if (PinToScreenEdge(knownPosition.ToLocalPosition(), out Vector3 rayToScreen, out float arrowAngle, mainCamera, screenSpaceCamera))
+              if (VrHudProjection.PinToScreenEdge(knownPosition.ToLocalPosition(), out Vector3 rayToScreen, out _))
               {
                 __instance.image.enabled = false;
-                var mainCameraLocal = mainCamera.transform.InverseTransformPoint(knownPosition.ToLocalPosition());
-                var hudCameraWorld = screenSpaceCamera.transform.TransformPoint(mainCameraLocal);
-                SetTargetArrow(SceneSingleton<CombatHUD>.i, true, rayToScreen, hudCameraWorld, -screenSpaceCamera.transform.forward, screenSpaceCamera);
+                if (VrHudProjection.TryProjectDirectionToCockpitHud(knownPosition.ToLocalPosition(), out var targetHudPosition))
+                  SetTargetArrow(SceneSingleton<CombatHUD>.i, true, rayToScreen, targetHudPosition, -screenSpaceCamera.transform.forward, screenSpaceCamera);
               }
               else
               {
                 __instance.image.enabled = true;
                 
-                var mainCameraLocal = mainCamera.transform.InverseTransformPoint(knownPosition.ToLocalPosition());
-                var hudCameraWorld = screenSpaceCamera.transform.TransformPoint(mainCameraLocal);
-                GetTransform(__instance).position = hudCameraWorld.normalized * HudDistance;
+                if (VrHudProjection.TryProjectToCockpitHud(knownPosition.ToLocalPosition(), out var targetHudPosition))
+                  GetTransform(__instance).position = targetHudPosition;
                 SetTargetArrow(SceneSingleton<CombatHUD>.i, false, Vector3.zero, Vector3.zero, Vector3.zero, screenSpaceCamera);
               }
               if (!__instance.unit.HasRadarEmission())
@@ -103,9 +94,8 @@ internal static class HUDUnitMarkerViewPositionPatch
             {
               if (!__instance.image.enabled)
                 __instance.image.enabled = true;
-              var mainCameraLocal = mainCamera.transform.InverseTransformPoint(knownPosition.ToLocalPosition());
-              var hudCameraWorld = screenSpaceCamera.transform.TransformPoint(mainCameraLocal);
-              GetTransform(__instance).position = hudCameraWorld.normalized * HudDistance;
+              if (VrHudProjection.TryProjectToCockpitHud(knownPosition.ToLocalPosition(), out var targetHudPosition))
+                GetTransform(__instance).position = targetHudPosition;
               if (__instance.fresh)
               {
                 Color markerColor = GetColor(__instance);
@@ -124,55 +114,6 @@ internal static class HUDUnitMarkerViewPositionPatch
         }
 
 
-        
-        private static bool PinToScreenEdge(Vector3 worldCoords, out Vector3 rayToScreen, out float arrowAngle, Component mainCamera, Component cockpitHudCamera)
-        {
-            var directionToTarget = worldCoords - mainCamera.transform.position;
-            if (directionToTarget.sqrMagnitude <= Mathf.Epsilon)
-            {
-                rayToScreen = cockpitHudCamera.transform.forward * HudDistance;
-                arrowAngle = 0.0f;
-                return false;
-            }
-
-            var mainCameraLocalDirection = mainCamera.transform.InverseTransformDirection(directionToTarget.normalized);
-            var targetYawDegrees = Mathf.Atan2(mainCameraLocalDirection.x, mainCameraLocalDirection.z) * Mathf.Rad2Deg;
-            var targetPitchDegrees = Mathf.Atan2(
-                mainCameraLocalDirection.y,
-                new Vector2(mainCameraLocalDirection.x, mainCameraLocalDirection.z).magnitude) * Mathf.Rad2Deg;
-
-            var horizontalRatio = targetYawDegrees / VrViewportHalfHorizontalDegrees;
-            var verticalRatio = targetPitchDegrees / VrViewportHalfVerticalDegrees;
-            var ellipseDistance = Mathf.Sqrt(horizontalRatio * horizontalRatio + verticalRatio * verticalRatio);
-            var screenEdge = mainCameraLocalDirection.z <= 0.0f || ellipseDistance > 1.0f;
-
-            var pinnedYawDegrees = targetYawDegrees;
-            var pinnedPitchDegrees = targetPitchDegrees;
-            if (screenEdge && ellipseDistance > Mathf.Epsilon)
-            {
-                pinnedYawDegrees /= ellipseDistance;
-                pinnedPitchDegrees /= ellipseDistance;
-            }
-
-            var pinnedLocalDirection = DirectionFromYawPitch(pinnedYawDegrees, pinnedPitchDegrees);
-            rayToScreen = cockpitHudCamera.transform.TransformDirection(pinnedLocalDirection).normalized * HudDistance;
-            arrowAngle = Mathf.Atan2(targetPitchDegrees, targetYawDegrees);
-
-            return screenEdge;
-        }
-
-        private static Vector3 DirectionFromYawPitch(float yawDegrees, float pitchDegrees)
-        {
-            var yawRadians = yawDegrees * Mathf.Deg2Rad;
-            var pitchRadians = pitchDegrees * Mathf.Deg2Rad;
-            var pitchCosine = Mathf.Cos(pitchRadians);
-
-            return new Vector3(
-                Mathf.Sin(yawRadians) * pitchCosine,
-                Mathf.Sin(pitchRadians),
-                Mathf.Cos(yawRadians) * pitchCosine);
-        }
-        
         
         private static void SetTargetArrow(global::CombatHUD instance, bool enabled, Vector3 position, Vector3 targetPosition, Vector3 up, Component screenSpaceCamera)
         {
