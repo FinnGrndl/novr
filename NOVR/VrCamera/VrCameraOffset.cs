@@ -36,14 +36,6 @@ public class VrCameraOffset: NOVRBehaviour
 
     private void UpdateTransform()
     {
-        if (ModConfiguration.Instance.AlignCameraToHorizon.Value)
-        {
-            var forward = Vector3.ProjectOnPlane(transform.parent.forward, Vector3.up);
-            transform.LookAt(transform.position + forward, Vector3.up);
-        }
-        else
-        {
-            transform.localRotation = Quaternion.identity;
-        }
+        transform.localRotation = Quaternion.identity;
     }
 }

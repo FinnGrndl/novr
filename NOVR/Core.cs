@@ -17,7 +17,6 @@ public class Core : MonoBehaviour
 
     private NOVRHeadsetData? _headsetData;
     private NOUIManager? _vrUi;
-    private ThingDisabler? _thingDisabler;
     private PropertyInfo? _refreshRateProperty;
     private VrTogglerManager? _vrTogglerManager;
     
@@ -56,7 +55,6 @@ public class Core : MonoBehaviour
         
         _headsetData = NOVRBehaviour.Create<NOVRHeadsetData>(transform);
         _vrUi = NOVRBehaviour.Create<NOUIManager>(transform);
-        _thingDisabler = NOVRBehaviour.Create<ThingDisabler>(transform);
         
         _vrTogglerManager = new VrTogglerManager();
         
@@ -81,14 +79,9 @@ public class Core : MonoBehaviour
         var headsetRefreshRate = (float)_refreshRateProperty.GetValue(null, null);
         if (headsetRefreshRate <= 0) return;
 
-        if (ModConfiguration.Instance.PhysicsMatchHeadsetRefreshRate.Value)
-        {
-            Time.fixedDeltaTime = 1f / (float) _refreshRateProperty.GetValue(null, null);
-        }
-        else
-        {
-            Time.fixedDeltaTime = _originalFixedDeltaTime;
-        }
+
+        Time.fixedDeltaTime = _originalFixedDeltaTime;
+        
     }
     private void FixedUpdate()
     {
