@@ -10,20 +10,17 @@ public class ModConfiguration
     
 
     public readonly ConfigFile Config;
-    public readonly ConfigEntry<bool> DisableUnityXrCameraAutoTracking;
+    public readonly ConfigEntry<float> TargetDesignatorOvershoot;
 
     public ModConfiguration(ConfigFile config)
     {
         Instance = this;
 
         Config = config;
-        
-        
-        DisableUnityXrCameraAutoTracking = config.Bind(
-            "Camera",
-            "Disable Unity XR Camera Auto Tracking",
-            true,
-            "Disables Unity's automatic XR camera tracking so NOVR can drive camera rotation manually. Turn off to test whether Unity's native camera tracking fixes Single Pass Instanced rendering.");
-        
+        TargetDesignatorOvershoot = config.Bind(
+            "General",
+            "Target Designator Overshoot",
+            1.2f,
+            "How much the target designator should multiply rotation to make for easier high off boresight target designation. Set to 1.0 to disable");
     }
 }
