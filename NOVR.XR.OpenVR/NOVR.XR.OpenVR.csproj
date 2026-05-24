@@ -10,7 +10,8 @@
         <AllowedReferenceRelatedFileExtensions>none</AllowedReferenceRelatedFileExtensions>
         <DebugType>none</DebugType>
         <OutputPath>$(BuildOutputDir)/plugins</OutputPath>
-        <BepInExDeployDir>$(NuclearOptionPluginDir)</BepInExDeployDir>
+        <GameDeployPath>$(NuclearOptionPluginDeployPath)</GameDeployPath>
+        <SkipGameLayoutStaging>true</SkipGameLayoutStaging>
         <TargetFramework>net48</TargetFramework>
         <DefineConstants>$(DefineConstants);UNITY_2017_2_OR_NEWER;UNITY_2020_1_OR_NEWER;UNITY_2018_3_OR_NEWER</DefineConstants>
         <RootNamespace>NOVRXrPlugin</RootNamespace>

@@ -17,6 +17,8 @@
 
     <NuclearOptionManagedDir>$(NuclearOptionGameDirResolved)/NuclearOption_Data/Managed</NuclearOptionManagedDir>
     <NuclearOptionBepInExCoreDir>$(NuclearOptionGameDirResolved)/BepInEx/core</NuclearOptionBepInExCoreDir>
+    <NuclearOptionPluginDeployPath>BepInEx/plugins/NOVR</NuclearOptionPluginDeployPath>
+    <NuclearOptionPatcherDeployPath>BepInEx/patchers/NOVR</NuclearOptionPatcherDeployPath>
     <NuclearOptionPluginDir Condition="'$(NuclearOptionPluginDir)' == '' And '$(NuclearOptionGameDirResolved)' != 'NUCLEAR_OPTION_NOT_FOUND'">$(NuclearOptionGameDirResolved)/BepInEx/plugins/NOVR</NuclearOptionPluginDir>
     <NuclearOptionPatcherDir Condition="'$(NuclearOptionPatcherDir)' == '' And '$(NuclearOptionGameDirResolved)' != 'NUCLEAR_OPTION_NOT_FOUND'">$(NuclearOptionGameDirResolved)/BepInEx/patchers/NOVR</NuclearOptionPatcherDir>
     <NuclearOptionLocalReferenceExcludes>$(NuclearOptionManagedDir)/Unity.XR.Management.dll;$(NuclearOptionManagedDir)/Unity.XR.OpenXR.dll;$(NuclearOptionManagedDir)/Unity.XR.OpenVR.dll</NuclearOptionLocalReferenceExcludes>

@@ -15,7 +15,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Uuvr.XInput", "Uuvr.XInput\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NOVR.Installer", "NOVR.Installer\NOVR.Installer.csproj", "{73540E94-C600-4D83-9F83-F54AF391F112}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NOVR.ReleasePackage", "NOVR.ReleasePackage\NOVR.ReleasePackage.csproj", "{5C8DE940-7ECD-4B66-9711-52A03DCD6943}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NOVR.Build", "NOVR.Build\NOVR.Build.csproj", "{5C8DE940-7ECD-4B66-9711-52A03DCD6943}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

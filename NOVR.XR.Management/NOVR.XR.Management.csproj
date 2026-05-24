@@ -10,7 +10,8 @@
         <AllowedReferenceRelatedFileExtensions>none</AllowedReferenceRelatedFileExtensions>
         <DebugType>none</DebugType>
         <OutputPath>$(BuildOutputDir)/plugins</OutputPath>
-        <BepInExDeployDir>$(NuclearOptionPluginDir)</BepInExDeployDir>
+        <GameDeployPath>$(NuclearOptionPluginDeployPath)</GameDeployPath>
+        <SkipGameLayoutStaging>true</SkipGameLayoutStaging>
         <TargetFramework>net48</TargetFramework>
         <RootNamespace>UnityEngine.XR.Management</RootNamespace>
         <AssemblyName>Unity.XR.Management</AssemblyName>

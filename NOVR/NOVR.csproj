@@ -11,17 +11,10 @@
         <AllowedReferenceRelatedFileExtensions>none</AllowedReferenceRelatedFileExtensions>
         <DebugType>none</DebugType>
         <OutputPath>$(BuildOutputDir)/plugins</OutputPath>
-        <BepInExDeployDir>$(NuclearOptionPluginDir)</BepInExDeployDir>
+        <GameDeployPath>$(NuclearOptionPluginDeployPath)</GameDeployPath>
         <RootNamespace>NOVR</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <ProjectReference Include="..\NOVR.XR.OpenXR\NOVR.XR.OpenXR.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <Content Include="Assets\**\*">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-            <Link>Assets\%(RecursiveDir)%(Filename)%(Extension)</Link>
-        </Content>
+        <ProjectReference Include="..\NOVR.XR.OpenXR\NOVR.XR.OpenXR.csproj" Private="false"/>
     </ItemGroup>
 </Project>

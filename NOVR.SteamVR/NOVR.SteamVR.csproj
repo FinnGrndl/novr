@@ -11,7 +11,7 @@
         <AllowedReferenceRelatedFileExtensions>none</AllowedReferenceRelatedFileExtensions>
         <DebugType>none</DebugType>
         <OutputPath>$(BuildOutputDir)/plugins</OutputPath>
-        <BepInExDeployDir>$(NuclearOptionPluginDir)</BepInExDeployDir>
+        <GameDeployPath>$(NuclearOptionPluginDeployPath)</GameDeployPath>
         <RootNamespace>NOVR.SteamVr</RootNamespace>
     </PropertyGroup>
 

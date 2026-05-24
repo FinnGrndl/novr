@@ -10,7 +10,7 @@
         <AllowedReferenceRelatedFileExtensions>none</AllowedReferenceRelatedFileExtensions>
         <DebugType>none</DebugType>
         <OutputPath>$(BuildOutputDir)/patchers</OutputPath>
-        <BepInExDeployDir>$(NuclearOptionPatcherDir)</BepInExDeployDir>
+        <GameDeployPath>$(NuclearOptionPatcherDeployPath)</GameDeployPath>
         <RootNamespace>NOVRPatcher</RootNamespace>
     </PropertyGroup>
     
@@ -33,17 +33,22 @@
         <Content Include="classdata.tpk">
             <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </Content>
-        <Content Include="$(BuildOutputDir)/plugins/Unity.XR.Management.dll">
-            <Link>CopyToGame\Data\Managed\Unity.XR.Management.dll</Link>
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </Content>
-        <Content Include="$(BuildOutputDir)/plugins/Unity.XR.OpenXR.dll">
-            <Link>CopyToGame\Data\Managed\Unity.XR.OpenXR.dll</Link>
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        </Content>
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Mono.Cecil" Version="0.10.4" IncludeAssets="compile" />
     </ItemGroup>
+
+    <Target Name="CopyXrAssembliesToPatcherPayload" BeforeTargets="StageGameLayout">
+        <ItemGroup>
+            <XrAssemblyPayload Include="$(BuildOutputDir)/plugins/Unity.XR.Management.dll" />
+            <XrAssemblyPayload Include="$(BuildOutputDir)/plugins/Unity.XR.OpenXR.dll" />
+        </ItemGroup>
+
+        <MakeDir Directories="$(TargetDir)CopyToGame/Data/Managed" />
+        <Copy
+            SourceFiles="@(XrAssemblyPayload)"
+            DestinationFiles="@(XrAssemblyPayload->'$(TargetDir)CopyToGame/Data/Managed/%(Filename)%(Extension)')"
+            SkipUnchangedFiles="true" />
+    </Target>
 </Project>

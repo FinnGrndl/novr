@@ -1,27 +1,3 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="Current"
-  xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <PropertyGroup>
-    <BuildOutputDir Condition="'$(BuildOutputDir)' == ''">$(MSBuildThisFileDirectory)build-output</BuildOutputDir>
-    <NuclearOptionFallbackLibDir>$(MSBuildThisFileDirectory)lib/mono/modern</NuclearOptionFallbackLibDir>
-    <NuclearOptionSolutionLocalReferenceExcludes>Unity.XR.Management.dll;Unity.XR.OpenXR.dll;Unity.XR.OpenVR.dll</NuclearOptionSolutionLocalReferenceExcludes>
-    <NuclearOptionFallbackLibExcludes>$(NuclearOptionFallbackLibDir)/Unity.XR.Management.dll;$(NuclearOptionFallbackLibDir)/Unity.XR.OpenXR.dll;$(NuclearOptionFallbackLibDir)/Unity.XR.OpenVR.dll</NuclearOptionFallbackLibExcludes>
-    <DefaultItemExcludes>$(DefaultItemExcludes);**/C:/**;$(MSBuildThisFileDirectory)build-output/**</DefaultItemExcludes>
-    <DefaultExcludesInProjectFolder>$(DefaultExcludesInProjectFolder);**/C:/**;$(MSBuildThisFileDirectory)build-output/**</DefaultExcludesInProjectFolder>
-    <DefineConstants>$(DefineConstants);MONO;MODERN</DefineConstants>
-  </PropertyGroup>
-
-  <Import Project="$(MSBuildThisFileDirectory)NuclearOption.props" />
-
-  <Target Name="DeployToBepInEx" AfterTargets="Build" Condition="'$(BepInExDeployDir)' != '' And '$(NuclearOptionGameDirResolved)' != 'NUCLEAR_OPTION_NOT_FOUND'">
-    <ItemGroup>
-      <BepInExDeployFiles Include="$(TargetDir)**/*" />
-    </ItemGroup>
-
-    <MakeDir Directories="$(BepInExDeployDir)" />
-    <Copy
-      SourceFiles="@(BepInExDeployFiles)"
-      DestinationFiles="@(BepInExDeployFiles->'$(BepInExDeployDir)/%(RecursiveDir)%(Filename)%(Extension)')"
-      SkipUnchangedFiles="true" />
-  </Target>
+<Project>
+  <Import Project="$(MSBuildThisFileDirectory)NOVR.Build/NOVR.Build.props" />
 </Project>

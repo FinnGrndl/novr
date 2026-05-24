@@ -24,16 +24,17 @@ public sealed class FileSystemInstaller
             await Task.Run(() =>
             {
                 ZipFile.ExtractToDirectory(novrZip, tempExtract);
-                var pluginsSource = Path.Combine(tempExtract, InstallerConstants.PluginsFolderName);
-                var patchersSource = Path.Combine(tempExtract, InstallerConstants.PatchersFolderName);
+                var pluginsSource = Path.Combine(tempExtract, InstallerConstants.BepInExFolderName, InstallerConstants.PluginsFolderName, InstallerConstants.ModFolderName);
+                var patchersSource = Path.Combine(tempExtract, InstallerConstants.BepInExFolderName, InstallerConstants.PatchersFolderName, InstallerConstants.ModFolderName);
 
                 if (!Directory.Exists(pluginsSource) || !Directory.Exists(patchersSource))
                 {
-                    throw new InvalidOperationException("NOVR ZIP must contain top-level plugins and patchers folders.");
+                    throw new InvalidOperationException("NOVR ZIP must contain a game-root layout with BepInEx/plugins/NOVR and BepInEx/patchers/NOVR folders.");
                 }
 
-                ReplaceDirectory(game.PluginDir, pluginsSource);
-                ReplaceDirectory(game.PatcherDir, patchersSource);
+                TryDeleteDirectory(game.PluginDir);
+                TryDeleteDirectory(game.PatcherDir);
+                CopyDirectory(tempExtract, game.GameDir);
             }, cancellationToken);
         }
         finally
@@ -61,13 +62,6 @@ public sealed class FileSystemInstaller
             TryDeleteFile(Path.Combine(game.GameDir, "winhttp.dll"));
             TryDeleteFile(Path.Combine(game.GameDir, "doorstop_config.ini"));
         }, cancellationToken);
-    }
-
-    private static void ReplaceDirectory(string destination, string source)
-    {
-        TryDeleteDirectory(destination);
-        Directory.CreateDirectory(destination);
-        CopyDirectory(source, destination);
     }
 
     private static void CopyDirectory(string source, string destination)

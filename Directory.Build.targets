@@ -1,0 +1,3 @@
+<Project>
+  <Import Project="$(MSBuildThisFileDirectory)NOVR.Build/NOVR.Build.targets" />
+</Project>

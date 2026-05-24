@@ -7,6 +7,7 @@ public static class InstallerConstants
     public const string GitHubRepo = "novr";
     public const string UserAgent = "NOVR.Installer";
 
+    public const string BepInExFolderName = "BepInEx";
     public const string PluginsFolderName = "plugins";
     public const string PatchersFolderName = "patchers";
     public const string ModFolderName = "NOVR";

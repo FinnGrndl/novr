@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <NovrRepoRoot>$(MSBuildThisFileDirectory)..</NovrRepoRoot>
+    <BuildOutputDir Condition="'$(BuildOutputDir)' == ''">$(NovrRepoRoot)/build-output</BuildOutputDir>
+    <GameLayoutOutputDir Condition="'$(GameLayoutOutputDir)' == ''">$(BuildOutputDir)/game</GameLayoutOutputDir>
+    <NuclearOptionFallbackLibDir>$(NovrRepoRoot)/lib/mono/modern</NuclearOptionFallbackLibDir>
+    <NuclearOptionSolutionLocalReferenceExcludes>Unity.XR.Management.dll;Unity.XR.OpenXR.dll;Unity.XR.OpenVR.dll</NuclearOptionSolutionLocalReferenceExcludes>
+    <NuclearOptionFallbackLibExcludes>$(NuclearOptionFallbackLibDir)/Unity.XR.Management.dll;$(NuclearOptionFallbackLibDir)/Unity.XR.OpenXR.dll;$(NuclearOptionFallbackLibDir)/Unity.XR.OpenVR.dll</NuclearOptionFallbackLibExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);**/C:/**;$(BuildOutputDir)/**</DefaultItemExcludes>
+    <DefaultExcludesInProjectFolder>$(DefaultExcludesInProjectFolder);**/C:/**;$(BuildOutputDir)/**</DefaultExcludesInProjectFolder>
+    <DefineConstants>$(DefineConstants);MONO;MODERN</DefineConstants>
+  </PropertyGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)NOVR.Sources.props" />
+</Project>
