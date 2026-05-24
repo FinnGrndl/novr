@@ -8,6 +8,7 @@
     <EnableDefaultItems>false</EnableDefaultItems>
     <ReleasePackageDistDir>$(MSBuildThisFileDirectory)../dist</ReleasePackageDistDir>
     <ReleasePackagePath>$(ReleasePackageDistDir)/NOVR.zip</ReleasePackagePath>
+    <ReleasePackageSourceDir>$(GameLayoutOutputDir)/BepInEx</ReleasePackageSourceDir>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +25,6 @@
   <Target Name="CreateReleaseZip" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
     <MakeDir Directories="$(ReleasePackageDistDir)" />
     <Delete Files="$(ReleasePackagePath)" />
-    <ZipDirectory SourceDirectory="$(GameLayoutOutputDir)" DestinationFile="$(ReleasePackagePath)" Overwrite="true" />
+    <ZipDirectory SourceDirectory="$(ReleasePackageSourceDir)" DestinationFile="$(ReleasePackagePath)" Overwrite="true" />
   </Target>
 </Project>

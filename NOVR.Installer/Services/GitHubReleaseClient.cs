@@ -9,6 +9,8 @@ public sealed class GitHubReleaseClient
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly HttpClient _httpClient;
+    
+    public ReleaseVersion FoundNOVRRelease { get; private set; } = (ReleaseVersion)"0.0.0";
 
     public GitHubReleaseClient()
     {
@@ -21,6 +23,7 @@ public sealed class GitHubReleaseClient
     {
         progress.Report("Checking latest NOVR release...");
         var release = await GetLatestReleaseAsync(InstallerConstants.GitHubOwner, InstallerConstants.GitHubRepo, cancellationToken);
+        FoundNOVRRelease = (ReleaseVersion)release.TagName;
         var asset = release.Assets.FirstOrDefault(asset =>
             asset.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
             !asset.Name.Contains("bepinex", StringComparison.OrdinalIgnoreCase));
@@ -30,7 +33,7 @@ public sealed class GitHubReleaseClient
             throw new InvalidOperationException("Latest NOVR release does not contain a ZIP asset.");
         }
 
-        return await DownloadAssetAsync(asset, tempDir, progress, cancellationToken);
+        return await DownloadAssetAsync(asset, tempDir, progress, release.TagName, cancellationToken);
     }
 
     public async Task<string> DownloadLatestBepInEx5Async(string tempDir, IProgress<string> progress, CancellationToken cancellationToken)
@@ -47,7 +50,7 @@ public sealed class GitHubReleaseClient
             throw new InvalidOperationException("Latest BepInEx 5 release does not contain a Windows x64 ZIP asset.");
         }
 
-        return await DownloadAssetAsync(asset, tempDir, progress, cancellationToken);
+        return await DownloadAssetAsync(asset, tempDir, progress, release.TagName, cancellationToken);
     }
 
     private async Task<GitHubRelease> GetLatestReleaseAsync(string owner, string repo, CancellationToken cancellationToken)
@@ -67,11 +70,11 @@ public sealed class GitHubReleaseClient
         return release ?? throw new InvalidOperationException("Could not find a BepInEx 5 release.");
     }
 
-    private async Task<string> DownloadAssetAsync(GitHubAsset asset, string tempDir, IProgress<string> progress, CancellationToken cancellationToken)
+    private async Task<string> DownloadAssetAsync(GitHubAsset asset, string tempDir, IProgress<string> progress, string releaseName, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(tempDir);
         var destination = Path.Combine(tempDir, asset.Name);
-        progress.Report($"Downloading {asset.Name}...");
+        progress.Report($"Downloading {asset.Name} from release {releaseName}...");
 
         await using var remote = await _httpClient.GetStreamAsync(asset.BrowserDownloadUrl, cancellationToken);
         await using var local = File.Create(destination);

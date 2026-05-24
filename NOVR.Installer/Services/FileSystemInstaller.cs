@@ -14,33 +14,41 @@ public sealed class FileSystemInstaller
         }, cancellationToken);
     }
 
-    public async Task InstallOrUpdateNovrAsync(GameInstallInfo game, string novrZip, IProgress<string> progress, CancellationToken cancellationToken)
+    public async Task InstallOrUpdateNovrAsync(GameInstallInfo game, string novrZip, string releaseName, IProgress<string> progress, CancellationToken cancellationToken)
     {
-        progress.Report("Installing NOVR...");
+        progress.Report("Installing NOVR " + releaseName + "...");
         var tempExtract = Path.Combine(Path.GetTempPath(), "novr-installer-" + Guid.NewGuid().ToString("N"));
-
+        
         try
         {
             await Task.Run(() =>
             {
                 ZipFile.ExtractToDirectory(novrZip, tempExtract);
-                var pluginsSource = Path.Combine(tempExtract, InstallerConstants.BepInExFolderName, InstallerConstants.PluginsFolderName, InstallerConstants.ModFolderName);
-                var patchersSource = Path.Combine(tempExtract, InstallerConstants.BepInExFolderName, InstallerConstants.PatchersFolderName, InstallerConstants.ModFolderName);
+                var pluginsSource = Path.Combine(tempExtract, InstallerConstants.PluginsFolderName, InstallerConstants.ModFolderName);
+                var patchersSource = Path.Combine(tempExtract, InstallerConstants.PatchersFolderName, InstallerConstants.ModFolderName);
 
                 if (!Directory.Exists(pluginsSource) || !Directory.Exists(patchersSource))
                 {
-                    throw new InvalidOperationException("NOVR ZIP must contain a game-root layout with BepInEx/plugins/NOVR and BepInEx/patchers/NOVR folders.");
+                    throw new InvalidOperationException("NOVR ZIP must contain plugins/NOVR and patchers/NOVR folders.");
                 }
 
                 TryDeleteDirectory(game.PluginDir);
                 TryDeleteDirectory(game.PatcherDir);
-                CopyDirectory(tempExtract, game.GameDir);
+                CopyDirectory(tempExtract, game.BepInExDir);
+                CreateVersionMetaData(Path.Combine(game.BepInExDir, InstallerConstants.PluginsFolderName, InstallerConstants.ModFolderName),  releaseName);
+
             }, cancellationToken);
         }
         finally
         {
             TryDeleteDirectory(tempExtract);
         }
+    }
+
+    private void CreateVersionMetaData(string path, string releaseName)
+    {
+        var versionFile = Path.Combine(path, InstallerConstants.VersionFileName);
+        File.WriteAllText(versionFile, releaseName);
     }
 
     public async Task UninstallNovrAsync(GameInstallInfo game, IProgress<string> progress, CancellationToken cancellationToken)

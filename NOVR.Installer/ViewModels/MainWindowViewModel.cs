@@ -8,6 +8,9 @@ namespace NOVR.Installer.ViewModels;
 
 public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
+    private sealed record DownloadedNovrRelease(string ZipPath, ReleaseVersion Version, string TempDir);
+
+    
     private readonly GameLocator _gameLocator = new();
     private readonly GitHubReleaseClient _releaseClient = new();
     private readonly FileSystemInstaller _installer = new();
@@ -23,6 +26,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private bool _removeBepInExOnFinish;
     private bool _showUninstallFinish;
     private Func<Task<string?>>? _browseForFolderAsync;
+    private Task<DownloadedNovrRelease>? _latestNovrDownloadTask;
+    private object _downloadLock = new();
+    
+    
+    private string _latestReleaseZip = string.Empty;
 
     public MainWindowViewModel()
     {
@@ -133,8 +141,67 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public async Task InitializeAsync()
     {
         await ScanAsync();
+        var progress = new Progress<string>(message => Status = message);
+        await EnsureLatestNovrReleaseDownloadedAsync(progress, CancellationToken.None);
+        
+        var currentInstalled = GameInfo?.Version;
+        var latest = _releaseClient.FoundNOVRRelease;
+
+        var installType = InstallType.Install;
+        ((IProgress<string>)progress).Report($"Latest: {latest}");
+        
+        if (GameInfo?.ModState == InstallState.FullyInstalled && currentInstalled >= latest)
+        {
+            ((IProgress<string>)progress).Report($"NOVR is up to date. {latest}");
+            installType = InstallType.Repair;
+        }
+        else if (GameInfo?.ModState == InstallState.FullyInstalled && currentInstalled < latest)
+        {
+            ((IProgress<string>)progress).Report($"Update available. {currentInstalled} -> {latest}");
+            installType = InstallType.Update;
+        }
+        
+        // I don't know why this has to be done like this but it does
+        ((IProgress<string>)new Progress<string>(message => PrimaryActionText = message)).Report(installType.ToString());
     }
 
+    
+    private Task<DownloadedNovrRelease> EnsureLatestNovrReleaseDownloadedAsync(
+        IProgress<string> progress,
+        CancellationToken cancellationToken)
+    {
+        lock (_downloadLock)
+        {
+            _latestNovrDownloadTask ??= DownloadLatestNovrReleaseAsync(progress, cancellationToken);
+            return _latestNovrDownloadTask;
+        }
+    }
+    private async Task<DownloadedNovrRelease> DownloadLatestNovrReleaseAsync(
+        IProgress<string> progress,
+        CancellationToken cancellationToken)
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "novr-installer-" + Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var zip = await _releaseClient.DownloadLatestNovrReleaseAsync(tempDir, progress, cancellationToken);
+            progress.Report($"Downloaded latest NOVR release: {_releaseClient.FoundNOVRRelease}");
+            return new DownloadedNovrRelease(zip, _releaseClient.FoundNOVRRelease, tempDir);
+        }
+        catch
+        {
+            TryDeleteDirectory(tempDir);
+
+            lock (_downloadLock)
+            {
+                _latestNovrDownloadTask = null;
+            }
+
+            throw;
+        }
+    }
+    
+    
     private Task ScanAsync()
     {
         return RunBusyAsync(() =>
@@ -155,7 +222,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             {
                 GameInfo = found;
                 Status = found.ModState == InstallState.FullyInstalled
-                    ? "NOVR is already installed."
+                    ? $"NOVR installed version: {found.Version}"
                     : "Nuclear Option found.";
                 Details = BuildDetails(found);
             }
@@ -183,15 +250,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private Task PrimaryActionAsync()
     {
-        return InstallOrUpdateAsync(repair: false);
+        return InstallOrUpdateAsync(InstallType.Install);
     }
 
     private Task RepairUpdateAsync()
     {
-        return InstallOrUpdateAsync(repair: true);
+        return InstallOrUpdateAsync(InstallType.Repair);
     }
 
-    private async Task InstallOrUpdateAsync(bool repair)
+    private async Task InstallOrUpdateAsync(InstallType installType)
     {
         var info = ValidateSelectedGame();
         if (info is null)
@@ -213,12 +280,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                     info = _gameLocator.Inspect(info.GameDir);
                 }
 
-                var novrZip = await _releaseClient.DownloadLatestNovrReleaseAsync(tempDir, progress, CancellationToken.None);
-                await _installer.InstallOrUpdateNovrAsync(info, novrZip, progress, CancellationToken.None);
+                var release = await EnsureLatestNovrReleaseDownloadedAsync(progress, CancellationToken.None);
+
+                await _installer.InstallOrUpdateNovrAsync(
+                    info,
+                    release.ZipPath,
+                    release.Version.ToString(),
+                    progress,
+                    CancellationToken.None);
+
                 var protonMessage = await _protonPrefixService.TryConfigureWinHttpOverrideAsync(info, progress, CancellationToken.None);
 
                 GameInfo = _gameLocator.Inspect(info.GameDir);
-                Status = repair ? "Repair/update complete." : "Install complete.";
+                Status = $"{installType} complete.";
                 Details = BuildDetails(GameInfo) + Environment.NewLine + protonMessage;
             }
             finally
