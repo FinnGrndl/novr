@@ -10,6 +10,36 @@ namespace NOVR.VrUi;
 [DefaultExecutionOrder(-1000)]
 public class VrUiCursor: NOVRBehaviour
 {
+    public static VrUiCursor? Instance { get; private set; }
+
+    public bool IsActive => _cursor != null && _cursor.activeSelf;
+    public Vector3 CursorPosition => _cursor != null ? _cursor.transform.position : Vector3.zero;
+
+    protected override void Awake()
+    {
+        base.Awake();
+        Instance = this;
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+        if (_virtualMouse != null)
+        {
+            try
+            {
+                InputSystem.RemoveDevice(_virtualMouse);
+            }
+            catch (System.Exception)
+            {
+                // Ignore removal exceptions
+            }
+            _virtualMouse = null;
+        }
+    }
 
     private Texture2D? _texture;
     private const float MaxYawDegrees = 65f;
@@ -24,16 +54,27 @@ public class VrUiCursor: NOVRBehaviour
     private RawImage? _cursorImage;
 
     private bool _hasInitializedEventSystem = false;
-    private Mouse _virtualMouse;
-    private Mouse _realMouse;
+    private Mouse? _virtualMouse;
+    private Mouse? _realMouse;
     
     
     private int ScreenWidth => Screen.width;
     private int ScreenHeight => Screen.height;
-    public Camera UiCamera =>  APIBus.CockpitHudCamera;
+    public Camera? UiCamera
+    {
+        get
+        {
+            if (NOUIManager.I == null) return null;
+            return APIBus.CockpitHudCamera;
+        }
+    }
     
     
-    public Vector2 GetScreenPoint() => _cursor ? UiCamera.WorldToScreenPoint(_cursor.transform.position)  : Vector2.zero;
+    public Vector2 GetScreenPoint()
+    {
+        var camera = UiCamera;
+        return (_cursor != null && camera != null) ? (Vector2)camera.WorldToScreenPoint(_cursor.transform.position) : Vector2.zero;
+    }
     
     
     private void Start()
@@ -61,20 +102,24 @@ public class VrUiCursor: NOVRBehaviour
         if (_texture == null) return;
         UpdateCursorAngles();
         
-        InputState.Change(_virtualMouse, new MouseState
+        if (_virtualMouse != null && _realMouse != null)
         {
-            position = GetScreenPoint(),
-            buttons = _realMouse.leftButton.isPressed ? (ushort)1 : (ushort)0 
-        });
+            InputState.Change(_virtualMouse, new MouseState
+            {
+                position = GetScreenPoint(),
+                buttons = _realMouse.leftButton.isPressed ? (ushort)1 : (ushort)0 
+            });
+        }
         
     }
     
 
     private void UpdateCursorAngles()
     {
-        
+        var camera = UiCamera;
+        if (camera == null) return;
 
-        EnsureCursorCanvas(UiCamera);
+        EnsureCursorCanvas(camera);
 
         if (_cursor == null || _cursorRectTransform == null)
         {
@@ -86,17 +131,15 @@ public class VrUiCursor: NOVRBehaviour
             _cursor.SetActive(true);
         }
         
-        
-        var mouse = _realMouse; // Whatever our real mouse is
+        var mouse = _realMouse;
+        if (mouse == null) return;
 
         var mousePos = mouse.position.ReadValue();
         float cursorPitch = ProjectPitchAngle(mousePos.y);
         float cursorYaw = ProjectYawAngle(mousePos.x);        
         
-        
-        
         Vector3 direction = Quaternion.Euler(-cursorPitch, cursorYaw, 0f) * Vector3.forward;
-        var inScreenSpace = UiCamera.WorldToScreenPoint( direction * DefaultProjectionDistance);
+        var inScreenSpace = camera.WorldToScreenPoint(direction * DefaultProjectionDistance);
         var cursorDistance = GetDistanceUnderCursor(inScreenSpace);
         Vector3 pos = direction * cursorDistance;
         _cursor.transform.position = pos;
@@ -182,8 +225,16 @@ public class VrUiCursor: NOVRBehaviour
     }
 
 
-    private float ProjectPitchAngle(float y) => Mathf.Lerp(-MaxPitchDegrees, MaxPitchDegrees, y / ScreenHeight);
-    private float ProjectYawAngle(float x) => Mathf.Lerp(-MaxYawDegrees, MaxYawDegrees, x / ScreenWidth);
+    private float ProjectPitchAngle(float y)
+    {
+        int height = ScreenHeight;
+        return height > 0 ? Mathf.Lerp(-MaxPitchDegrees, MaxPitchDegrees, y / height) : 0f;
+    }
+    private float ProjectYawAngle(float x)
+    {
+        int width = ScreenWidth;
+        return width > 0 ? Mathf.Lerp(-MaxYawDegrees, MaxYawDegrees, x / width) : 0f;
+    }
     private static bool IsRealCursorVisible() => Cursor.visible && Cursor.lockState != CursorLockMode.Locked;
 
     private static Texture2D CreateCursorTexture()
