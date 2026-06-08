@@ -6,6 +6,8 @@ Adds an experimental native VR menu UI path for Nuclear Option's non-flight menu
 
 This is gated behind the `Enable Native Menu UI` config value and keeps the existing menu UI alive for state ownership and action dispatch.
 
+This PR was created with the help of AI-assisted coding. The implementation was built, reviewed, and manually tested locally before submission.
+
 ## Included
 
 - Experimental native VR menu root under `NOVR/VrUi/Native`.
