@@ -8,6 +8,9 @@ namespace NOVR.VrUi.Native;
 
 public class NativeGameActionAdapter
 {
+    private const string TopLevelMainMenuPathFragment = "Prejoin menu/LeftPanel/Container/MenuButtonsPanel";
+    private const int MaxButtonsToDescribe = 20;
+
     private readonly Dictionary<NativeGameAction, string[]> _mainMenuActionLabels = new()
     {
         { NativeGameAction.SinglePlayer, new[] { "SINGLE PLAYER", "SINGLEPLAYER" } },
@@ -41,6 +44,12 @@ public class NativeGameActionAdapter
 
     public bool TryInvoke(NativeGameAction action)
     {
+        if (!IsTopLevelMainMenuAvailable)
+        {
+            Debug.LogWarning($"[NOVR] Native UI action '{action}' ignored because the original top-level main menu is not available.");
+            return false;
+        }
+
         if (!_mainMenuActionLabels.TryGetValue(action, out var candidateLabels))
         {
             Debug.LogWarning($"[NOVR] Native UI action '{action}' is not mapped to an original menu action.");
@@ -66,6 +75,26 @@ public class NativeGameActionAdapter
 
         Debug.LogWarning($"[NOVR] Native UI action '{action}' could not find an original menu button. Candidates: {string.Join(", ", candidateLabels)}. Available buttons: {DescribeButtons(buttons)}");
         return false;
+    }
+
+    public bool IsTopLevelMainMenuAvailable
+    {
+        get
+        {
+            if (_originalMainCanvas == null) return false;
+            if (!_mainMenuActionLabels.TryGetValue(NativeGameAction.SinglePlayer, out var singlePlayerLabels)) return false;
+
+            var buttons = GetButtons();
+            for (var index = 0; index < buttons.Length; index++)
+            {
+                if (IsTopLevelMainMenuButton(buttons[index]) && ButtonMatches(buttons[index], singlePlayerLabels))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
     }
 
     public void QuitGame()
@@ -101,6 +130,11 @@ public class NativeGameActionAdapter
         return false;
     }
 
+    private static bool IsTopLevelMainMenuButton(Button button)
+    {
+        return GetGameObjectPath(button.gameObject).Contains(TopLevelMainMenuPathFragment);
+    }
+
     private static IEnumerable<string> GetButtonDescriptors(Button button)
     {
         yield return button.name;
@@ -127,8 +161,15 @@ public class NativeGameActionAdapter
     private static string DescribeButtons(IEnumerable<Button> buttons)
     {
         var builder = new StringBuilder();
+        var count = 0;
         foreach (var button in buttons)
         {
+            count++;
+            if (count > MaxButtonsToDescribe)
+            {
+                continue;
+            }
+
             if (builder.Length > 0)
             {
                 builder.Append("; ");
@@ -138,6 +179,11 @@ public class NativeGameActionAdapter
             builder.Append(" [");
             builder.Append(string.Join(" | ", GetButtonDescriptors(button)));
             builder.Append(']');
+        }
+
+        if (count > MaxButtonsToDescribe)
+        {
+            builder.Append($"; ... {count - MaxButtonsToDescribe} more");
         }
 
         return builder.Length > 0 ? builder.ToString() : "none";

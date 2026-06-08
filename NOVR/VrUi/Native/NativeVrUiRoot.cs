@@ -46,7 +46,9 @@ public class NativeVrUiRoot : NOVRBehaviour
         UpdatePlacement();
         ScanForMainMenuCanvas();
 
-        var shouldShowMainMenu = _mainCanvas != null && _mainCanvas.activeInHierarchy;
+        var shouldShowMainMenu = _mainCanvas != null &&
+                                 _mainCanvas.activeInHierarchy &&
+                                 _actions.IsTopLevelMainMenuAvailable;
         if (_root != null && _root.activeSelf != shouldShowMainMenu)
         {
             _root.SetActive(shouldShowMainMenu);
