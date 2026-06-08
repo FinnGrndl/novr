@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Text;
+using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -27,6 +28,8 @@ public class NativeGameActionAdapter
     };
 
     private GameObject? _originalMainCanvas;
+
+    public event Action<NativeGameAction>? ActionInvoked;
 
     public void SetOriginalMainCanvas(GameObject? originalMainCanvas)
     {
@@ -70,6 +73,7 @@ public class NativeGameActionAdapter
 
             Debug.Log($"[NOVR] Native UI action '{action}' delegated to original button '{GetGameObjectPath(button.gameObject)}'.");
             button.onClick.Invoke();
+            ActionInvoked?.Invoke(action);
             return true;
         }
 
@@ -104,6 +108,29 @@ public class NativeGameActionAdapter
             Debug.Log("[NOVR] Native UI falling back to Application.Quit for ExitGame.");
             Application.Quit();
         }
+    }
+
+    public bool TryInvokeCurrentMenuButton(string actionName, params string[] candidateLabels)
+    {
+        if (_originalMainCanvas == null)
+        {
+            Debug.LogWarning($"[NOVR] Native UI current-menu action '{actionName}' ignored because the original MainCanvas is not available.");
+            return false;
+        }
+
+        var buttons = GetButtons();
+        for (var index = 0; index < buttons.Length; index++)
+        {
+            var button = buttons[index];
+            if (!ButtonMatches(button, candidateLabels)) continue;
+
+            Debug.Log($"[NOVR] Native UI current-menu action '{actionName}' delegated to original button '{GetGameObjectPath(button.gameObject)}'.");
+            button.onClick.Invoke();
+            return true;
+        }
+
+        Debug.LogWarning($"[NOVR] Native UI current-menu action '{actionName}' could not find an original menu button. Candidates: {string.Join(", ", candidateLabels)}. Available buttons: {DescribeButtons(buttons)}");
+        return false;
     }
 
     private Button[] GetButtons()

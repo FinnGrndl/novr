@@ -14,6 +14,7 @@ public class NativeMainMenuShell : MonoBehaviour
 
     private NativeGameActionAdapter? _actions;
     private RectTransform? _rectTransform;
+    private GameObject? _container;
     private Font? _font;
 
     public void Initialize(NativeGameActionAdapter actions, RectTransform rectTransform)
@@ -28,10 +29,13 @@ public class NativeMainMenuShell : MonoBehaviour
     {
         if (_rectTransform == null) return;
 
-        CreateImage("Background", _rectTransform, BackgroundColor, Vector2.zero, _rectTransform.sizeDelta);
-        CreateText("Game Title", _rectTransform, "NUCLEAR OPTION", new Vector2(565f, 370f), new Vector2(380f, 54f), 38, TextAnchor.MiddleRight, Color.white);
+        var container = CreateContainer("Native Main Menu Shell", _rectTransform, _rectTransform.sizeDelta);
+        _container = container.gameObject;
 
-        var rail = CreatePanel("Main Menu Rail", _rectTransform, PanelColor, new Vector2(-675f, 0f), new Vector2(210f, 860f));
+        CreateImage("Background", container, BackgroundColor, Vector2.zero, container.sizeDelta);
+        CreateText("Game Title", container, "NUCLEAR OPTION", new Vector2(565f, 370f), new Vector2(380f, 54f), 38, TextAnchor.MiddleRight, Color.white);
+
+        var rail = CreatePanel("Main Menu Rail", container, PanelColor, new Vector2(-675f, 0f), new Vector2(210f, 860f));
         CreateText("Menu Header", rail, "NOVR", new Vector2(0f, 380f), new Vector2(170f, 34f), 22, TextAnchor.MiddleCenter, Color.white);
 
         var primaryButtons = new[]
@@ -64,7 +68,7 @@ public class NativeMainMenuShell : MonoBehaviour
             ExitButtonColor,
             () => _actions?.QuitGame());
 
-        var linkPanel = CreatePanel("Secondary Links", _rectTransform, PanelColor, new Vector2(-520f, -335f), new Vector2(230f, 145f));
+        var linkPanel = CreatePanel("Secondary Links", container, PanelColor, new Vector2(-520f, -335f), new Vector2(230f, 145f));
         var secondaryButtons = new[]
         {
             new MenuAction("Change Log", NativeGameAction.ChangeLog),
@@ -86,9 +90,17 @@ public class NativeMainMenuShell : MonoBehaviour
                 13);
         }
 
-        var tipPanel = CreatePanel("Menu Tip", _rectTransform, new Color(0.02f, 0.025f, 0.032f, 0.88f), new Vector2(250f, -350f), new Vector2(520f, 86f));
+        var tipPanel = CreatePanel("Menu Tip", container, new Color(0.02f, 0.025f, 0.032f, 0.88f), new Vector2(250f, -350f), new Vector2(520f, 86f));
         CreateText("Tip Title", tipPanel, "Did you know?", new Vector2(0f, 22f), new Vector2(480f, 24f), 15, TextAnchor.MiddleCenter, Color.white);
         CreateText("Tip Body", tipPanel, "The SAH-46 Chicane is much better protected against machine gun fire than other aircraft.", new Vector2(0f, -12f), new Vector2(460f, 36f), 14, TextAnchor.MiddleCenter, new Color(0.8f, 0.86f, 0.88f, 1f));
+    }
+
+    public void SetVisible(bool visible)
+    {
+        if (_container != null && _container.activeSelf != visible)
+        {
+            _container.SetActive(visible);
+        }
     }
 
     private void InvokeAction(NativeGameAction action)
@@ -99,6 +111,18 @@ public class NativeMainMenuShell : MonoBehaviour
     private RectTransform CreatePanel(string name, RectTransform parent, Color color, Vector2 anchoredPosition, Vector2 size)
     {
         return CreateImage(name, parent, color, anchoredPosition, size);
+    }
+
+    private RectTransform CreateContainer(string name, RectTransform parent, Vector2 size)
+    {
+        var gameObject = new GameObject(name);
+        gameObject.transform.SetParent(parent, false);
+        LayerHelper.SetLayerRecursive(gameObject.transform, LayerHelper.GetVrUiLayer());
+
+        var rectTransform = gameObject.AddComponent<RectTransform>();
+        rectTransform.sizeDelta = size;
+        rectTransform.anchoredPosition = Vector2.zero;
+        return rectTransform;
     }
 
     private RectTransform CreateImage(string name, RectTransform parent, Color color, Vector2 anchoredPosition, Vector2 size)
