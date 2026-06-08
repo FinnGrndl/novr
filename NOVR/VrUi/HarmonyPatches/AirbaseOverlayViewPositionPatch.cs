@@ -31,7 +31,7 @@ internal static class AirbaseOverlayViewPositionPatch
                 return;
 
             __instance.transform.rotation = cockpitHudCamera.transform.rotation;
-
+            
             UpdateAirbaseMarker(__instance, aircraft);
             UpdateRunwayBorders(__instance);
             UpdateGlideslope(__instance, aircraft);
