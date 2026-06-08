@@ -15,8 +15,7 @@ A native VR UI avoids those inherited layout assumptions by building VR-first pa
 - Add a separate native VR UI system under `NOVR/VrUi/Native`.
 - Keep mouse as the primary input path for seated VR users.
 - Keep existing UI alive where needed for state ownership, but hide or bypass its presentation.
-- Replace screens incrementally rather than rewriting all UI at once.
-- Start with a small bounded screen before attempting complex menus or the tactical map.
+- Replace screens incrementally 
 
 ## Input Model
 
