@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This roadmap breaks the native VR UI work into small, reviewable milestones. The goal is to move NOVR away from broad screen-space-to-world-space UI conversion for complex menus while preserving mouse-first seated VR control.
+This roadmap breaks the native VR UI work into implementation milestones for one larger feature branch. The goal is to move NOVR away from broad screen-space-to-world-space UI conversion for complex pre-flight menus while preserving mouse-first seated VR control.
 
 ## Guiding Constraints
 
@@ -10,7 +10,8 @@ This roadmap breaks the native VR UI work into small, reviewable milestones. The
 - VR controllers are optional, not required.
 - Existing game UI may stay alive when it owns state or side effects.
 - Native VR UI should be introduced incrementally behind an experimental config option.
-- The main menu parent shell is the first target, but deep submenus and the tactical map should remain separate milestones.
+- The first shipping target is the non-flight menu stack: main menu, settings, mission selection, multiplayer entry points, mission editor entry points, encyclopedia, workshop, changelog, roadmap, and community links.
+- In-flight menus are out of scope for the first native UI delivery. This includes the tactical map, pause/exit menu while flying, and other gameplay overlays.
 - New UI should avoid inherited screen-space Z offsets, clipping masks, and fragile TextMeshPro mask interactions.
 
 ## Phase 0: Baseline And Guardrails
@@ -25,7 +26,7 @@ Deliverables:
 
 Acceptance criteria:
 
-- No runtime behavior changes.
+- No runtime behavior changes from documentation-only commits.
 - Reviewers can evaluate the intended direction before implementation starts.
 
 ## Phase 1: Native UI Scaffolding
@@ -49,7 +50,7 @@ Acceptance criteria:
 
 ## Phase 2: Main Menu Parent Shell
 
-Build a native parent shell for the main menu to validate layout, input, and lifecycle behavior against the highest-level UI flow. This should not attempt to replace every submenu at once.
+Build a native parent shell for the main menu to validate layout, input, and lifecycle behavior against the highest-level UI flow. This is the first visible feature slice of the larger non-flight menu replacement.
 
 Initial scope:
 
@@ -57,7 +58,8 @@ Initial scope:
 - Mouse-first hover/click behavior.
 - Native buttons that call existing game actions or delegate to original UI buttons.
 - Original main menu kept alive where it owns state or side effects.
-- Deep settings, loadout, mission selection, and tactical map flows left to later phases.
+- Deep settings, mission selection, and mission editor flows left to later phases.
+- In-flight tactical map and pause/exit menu left out of scope.
 
 Deliverables:
 
@@ -89,16 +91,20 @@ Acceptance criteria:
 - Each adapter has a narrow responsibility.
 - Missing game references fail gracefully with useful logs.
 
-## Phase 4: Menu Migration
+## Phase 4: Non-Flight Menu Migration
 
-Move selected non-map menus from patched original UI to native VR panels.
+Move the pre-flight/main-menu UI stack from patched original UI to native VR panels.
 
 Candidate order:
 
 1. Main menu submenus.
-2. Pause menu.
-3. Settings/options.
-4. Aircraft/loadout screens.
+2. Settings/options.
+3. Single player mission selection.
+4. Multiplayer entry flow.
+5. Mission editor entry flow.
+6. Encyclopedia.
+7. Workshop.
+8. Changelog, development roadmap, and community links.
 
 Deliverables:
 
@@ -108,16 +114,17 @@ Deliverables:
 
 Acceptance criteria:
 
-- Users can complete the selected flow with headset plus mouse.
+- Users can complete the non-flight menu flows with headset plus mouse.
 - Text rendering does not depend on disabling ancestor masks.
 - UI layout does not require per-element Z flattening from the original hierarchy.
 
-## Phase 5: Tactical Map Research
+## Phase 5: In-Flight Menu Research
 
-Treat the tactical map as a separate research milestone because it mixes UI, world/map coordinates, cursor math, markers, and selection behavior.
+Treat in-flight menus as a later research milestone because they mix gameplay state, world/map coordinates, cursor math, markers, selection behavior, and pause/exit state.
 
 Deliverables:
 
+- List of in-flight menu surfaces and owners.
 - Map interaction requirements.
 - Coordinate conversion notes.
 - Decision on native map versus RenderTexture-backed map.
@@ -125,8 +132,8 @@ Deliverables:
 
 Acceptance criteria:
 
-- No full tactical map rewrite begins until the interaction model is proven.
-- Map work remains isolated from simpler menu migration.
+- No full tactical map or in-flight pause menu rewrite begins until the interaction model is proven.
+- In-flight work remains isolated from pre-flight menu migration.
 
 ## Phase 6: Stabilization
 
@@ -147,11 +154,12 @@ Acceptance criteria:
 
 ## PR Strategy
 
-Prefer small PRs:
+Prefer one cohesive PR for the non-flight native menu stack, with commits organized by milestone:
 
-- PR 1: proposal and roadmap.
-- PR 2: native UI scaffolding and input state.
-- PR 3: first native panel.
-- PR 4+: individual menu migrations.
+- Proposal, roadmap, and SDK compatibility fix.
+- Native UI scaffolding and input state.
+- Main menu parent shell.
+- Individual non-flight menu migrations.
+- Stabilization and documentation.
 
-Avoid combining scaffolding, multiple menu rewrites, and tactical map work in one PR.
+Keep in-flight menus, tactical map, and gameplay pause/exit menus out of the first native UI PR.
