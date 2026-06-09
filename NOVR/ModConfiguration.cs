@@ -12,6 +12,9 @@ public class ModConfiguration
     public readonly ConfigFile Config;
     public readonly ConfigEntry<float> TargetDesignatorOvershoot;
     public readonly ConfigEntry<bool> EnableNativeMenuUi;
+    public readonly ConfigEntry<float> NativeMenuScale;
+    public readonly ConfigEntry<float> NativeMenuDistance;
+    public readonly ConfigEntry<float> NativeMenuHeightOffset;
 
     public ModConfiguration(ConfigFile config)
     {
@@ -27,7 +30,25 @@ public class ModConfiguration
         EnableNativeMenuUi = config.Bind(
             "Experimental",
             "Enable Native Menu UI",
-            false,
-            "Use NOVR's native VR menu UI for non-flight menus. This is experimental and defaults to the existing patched game UI when disabled.");
+            true,
+            "Use NOVR's native VR menu UI for non-flight menus. Disable to fall back to the existing patched game UI.");
+
+        NativeMenuScale = config.Bind(
+            "Experimental",
+            "Native Menu Scale",
+            1.25f,
+            "Size multiplier for NOVR's native VR menu UI. Values from 0.75 to 2.0 are supported.");
+
+        NativeMenuDistance = config.Bind(
+            "Experimental",
+            "Native Menu Distance",
+            3.0f,
+            "Distance in meters from the headset when NOVR's native VR menu UI is opened or recentered. Values from 1.5 to 6.0 are supported.");
+
+        NativeMenuHeightOffset = config.Bind(
+            "Experimental",
+            "Native Menu Height Offset",
+            0.0f,
+            "Vertical offset in meters applied when NOVR's native VR menu UI is opened or recentered. Values from -0.25 to 1.0 are supported.");
     }
 }
