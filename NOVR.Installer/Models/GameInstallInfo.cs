@@ -15,5 +15,18 @@ public sealed record GameInstallInfo(
     public string PluginDir => Path.Combine(BepInExDir, "plugins", InstallerConstants.ModFolderName);
     public string PatcherDir => Path.Combine(BepInExDir, "patchers", InstallerConstants.ModFolderName);
     public string VersionFile => Path.Combine(PluginDir, InstallerConstants.VersionFileName);
-    public ReleaseVersion Version => File.Exists(VersionFile) ? (ReleaseVersion)File.ReadAllText(VersionFile) : (ReleaseVersion)"0.0.0";
+    public ReleaseVersion Version
+    {
+        get
+        {
+            if (!File.Exists(VersionFile))
+            {
+                return (ReleaseVersion)"0.0.0";
+            }
+
+            return ReleaseVersion.TryParse(File.ReadAllText(VersionFile), out var version)
+                ? version
+                : (ReleaseVersion)"0.0.0";
+        }
+    }
 }

@@ -4,5 +4,6 @@ public enum InstallType
 {
     Install,
     Update,
-    Repair
+    Repair,
+    Downgrade
 }

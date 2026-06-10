@@ -391,4 +391,5 @@ FodyWeavers.xsd
 # Local/generated mod build outputs
 build-output/
 dist/
+site/
 **/C:/

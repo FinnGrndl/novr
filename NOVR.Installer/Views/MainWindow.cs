@@ -1,7 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
-using Avalonia.Threading;
 using NOVR.Installer.ViewModels;
 
 namespace NOVR.Installer.Views;
@@ -84,6 +83,7 @@ public sealed class MainWindow : Window
         pathPanel.Children.Add(pathBox);
         pathPanel.Children.Add(browseButton);
         root.Children.Add(pathPanel);
+        root.Children.Add(BuildReleasePicker());
 
         var status = new TextBlock
         {
@@ -116,6 +116,54 @@ public sealed class MainWindow : Window
         root.Children.Add(BuildUninstallFinishActions());
 
         return root;
+    }
+
+    private Control BuildReleasePicker()
+    {
+        var panel = new StackPanel
+        {
+            Spacing = 8
+        };
+
+        var releasePanel = new Grid
+        {
+            ColumnDefinitions =
+            {
+                new ColumnDefinition(GridLength.Star),
+                new ColumnDefinition(GridLength.Auto)
+            }
+        };
+
+        var releaseBox = new ComboBox
+        {
+            MinHeight = 38,
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+        releaseBox.Bind(ComboBox.ItemsSourceProperty, new Avalonia.Data.Binding(nameof(MainWindowViewModel.AvailableReleases)));
+        releaseBox.Bind(ComboBox.SelectedItemProperty, new Avalonia.Data.Binding(nameof(MainWindowViewModel.SelectedRelease)) { Mode = Avalonia.Data.BindingMode.TwoWay });
+
+        var refreshButton = new Button
+        {
+            Content = "Refresh releases",
+            Margin = new Avalonia.Thickness(10, 0, 0, 0),
+            MinHeight = 38
+        };
+        refreshButton.Bind(Button.CommandProperty, new Avalonia.Data.Binding(nameof(MainWindowViewModel.ReloadReleasesCommand)));
+        Grid.SetColumn(refreshButton, 1);
+
+        releasePanel.Children.Add(releaseBox);
+        releasePanel.Children.Add(refreshButton);
+
+        var releaseStatus = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Opacity = 0.85
+        };
+        releaseStatus.Bind(TextBlock.TextProperty, new Avalonia.Data.Binding(nameof(MainWindowViewModel.ReleaseStatus)));
+
+        panel.Children.Add(releasePanel);
+        panel.Children.Add(releaseStatus);
+        return panel;
     }
 
     private Control BuildInstallActions()
@@ -159,10 +207,10 @@ public sealed class MainWindow : Window
 
         var repair = new Button
         {
-            Content = "Repair / Update",
             MinWidth = 150,
             MinHeight = 42
         };
+        repair.Bind(ContentControl.ContentProperty, new Avalonia.Data.Binding(nameof(MainWindowViewModel.PrimaryActionText)));
         repair.Bind(Button.CommandProperty, new Avalonia.Data.Binding(nameof(MainWindowViewModel.RepairUpdateCommand)));
 
         var uninstall = new Button

@@ -1,6 +1,7 @@
-using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using NOVR.Installer.Models;
 
 namespace NOVR.Installer.Services;
 
@@ -9,9 +10,6 @@ public sealed class GitHubReleaseClient
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly HttpClient _httpClient;
-    
-    public ReleaseVersion FoundNOVRRelease { get; private set; } = (ReleaseVersion)"0.0.0";
-
     public GitHubReleaseClient()
     {
         _httpClient = new HttpClient();
@@ -19,20 +17,40 @@ public sealed class GitHubReleaseClient
         _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
     }
 
-    public async Task<string> DownloadLatestNovrReleaseAsync(string tempDir, IProgress<string> progress, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<NovrRelease>> GetNovrReleasesAsync(
+        IProgress<string> progress,
+        CancellationToken cancellationToken)
     {
-        progress.Report("Checking latest NOVR release...");
-        var release = await GetLatestReleaseAsync(InstallerConstants.GitHubOwner, InstallerConstants.GitHubRepo, cancellationToken);
-        FoundNOVRRelease = (ReleaseVersion)release.TagName;
-        var asset = release.Assets.FirstOrDefault(asset =>
-            asset.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
-            !asset.Name.Contains("bepinex", StringComparison.OrdinalIgnoreCase));
+        progress.Report($"Loading releases from {InstallerConstants.GitHubOwner}/{InstallerConstants.GitHubRepo}...");
+        var releases = await GetReleasesAsync(
+            InstallerConstants.GitHubOwner,
+            InstallerConstants.GitHubRepo,
+            cancellationToken);
 
-        if (asset is null)
+        var installable = releases
+            .Where(release => !release.Draft)
+            .Select(TryCreateNovrRelease)
+            .Where(release => release is not null)
+            .Select(release => release!)
+            .OrderByDescending(release => release.PublishedAt ?? DateTimeOffset.MinValue)
+            .ToArray();
+
+        if (installable.Length == 0)
         {
-            throw new InvalidOperationException("Latest NOVR release does not contain a ZIP asset.");
+            throw new InvalidOperationException(
+                $"No published {InstallerConstants.NovrReleaseAssetName} assets were found in {InstallerConstants.GitHubOwner}/{InstallerConstants.GitHubRepo} releases.");
         }
 
+        return installable;
+    }
+
+    public async Task<string> DownloadNovrReleaseAsync(
+        NovrRelease release,
+        string tempDir,
+        IProgress<string> progress,
+        CancellationToken cancellationToken)
+    {
+        var asset = new GitHubAsset(release.AssetName, release.AssetDownloadUrl);
         return await DownloadAssetAsync(asset, tempDir, progress, release.TagName, cancellationToken);
     }
 
@@ -40,7 +58,7 @@ public sealed class GitHubReleaseClient
     {
         progress.Report("Checking latest BepInEx 5 release...");
         var release = await GetLatestBepInEx5ReleaseAsync(cancellationToken);
-        var asset = release.Assets.FirstOrDefault(asset =>
+        var asset = (release.Assets ?? Array.Empty<GitHubAsset>()).FirstOrDefault(asset =>
             asset.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase) &&
             asset.Name.Contains("BepInEx", StringComparison.OrdinalIgnoreCase) &&
             asset.Name.Contains("win_x64", StringComparison.OrdinalIgnoreCase));
@@ -53,19 +71,17 @@ public sealed class GitHubReleaseClient
         return await DownloadAssetAsync(asset, tempDir, progress, release.TagName, cancellationToken);
     }
 
-    private async Task<GitHubRelease> GetLatestReleaseAsync(string owner, string repo, CancellationToken cancellationToken)
+    private async Task<GitHubRelease[]> GetReleasesAsync(string owner, string repo, CancellationToken cancellationToken)
     {
-        var url = $"https://api.github.com/repos/{owner}/{repo}/releases/latest";
+        var url = $"https://api.github.com/repos/{owner}/{repo}/releases?per_page=50";
         await using var stream = await _httpClient.GetStreamAsync(url, cancellationToken);
-        var release = await JsonSerializer.DeserializeAsync<GitHubRelease>(stream, JsonOptions, cancellationToken);
-        return release ?? throw new InvalidOperationException($"Could not read latest release for {owner}/{repo}.");
+        var releases = await JsonSerializer.DeserializeAsync<GitHubRelease[]>(stream, JsonOptions, cancellationToken);
+        return releases ?? throw new InvalidOperationException($"Could not read releases for {owner}/{repo}.");
     }
 
     private async Task<GitHubRelease> GetLatestBepInEx5ReleaseAsync(CancellationToken cancellationToken)
     {
-        var url = $"https://api.github.com/repos/{InstallerConstants.BepInExOwner}/{InstallerConstants.BepInExRepo}/releases?per_page=30";
-        await using var stream = await _httpClient.GetStreamAsync(url, cancellationToken);
-        var releases = await JsonSerializer.DeserializeAsync<GitHubRelease[]>(stream, JsonOptions, cancellationToken);
+        var releases = await GetReleasesAsync(InstallerConstants.BepInExOwner, InstallerConstants.BepInExRepo, cancellationToken);
         var release = releases?.FirstOrDefault(release => release.TagName.StartsWith("v5.", StringComparison.OrdinalIgnoreCase));
         return release ?? throw new InvalidOperationException("Could not find a BepInEx 5 release.");
     }
@@ -82,13 +98,43 @@ public sealed class GitHubReleaseClient
         return destination;
     }
 
+    private static NovrRelease? TryCreateNovrRelease(GitHubRelease release)
+    {
+        if (!ReleaseVersion.TryParse(release.TagName, out var version))
+        {
+            return null;
+        }
+
+        var asset = (release.Assets ?? Array.Empty<GitHubAsset>()).FirstOrDefault(asset =>
+            asset.Name.Equals(InstallerConstants.NovrReleaseAssetName, StringComparison.OrdinalIgnoreCase));
+
+        if (asset is null)
+        {
+            return null;
+        }
+
+        return new NovrRelease(
+            release.TagName,
+            string.IsNullOrWhiteSpace(release.Name) ? release.TagName : release.Name,
+            version,
+            release.Prerelease,
+            release.PublishedAt,
+            asset.Name,
+            asset.BrowserDownloadUrl);
+    }
+
     private sealed record GitHubRelease(
-        [property: System.Text.Json.Serialization.JsonPropertyName("tag_name")]
+        [property: JsonPropertyName("tag_name")]
         string TagName,
-        GitHubAsset[] Assets);
+        string? Name,
+        bool Draft,
+        bool Prerelease,
+        [property: JsonPropertyName("published_at")]
+        DateTimeOffset? PublishedAt,
+        GitHubAsset[]? Assets);
 
     private sealed record GitHubAsset(
         string Name,
-        [property: System.Text.Json.Serialization.JsonPropertyName("browser_download_url")]
+        [property: JsonPropertyName("browser_download_url")]
         string BrowserDownloadUrl);
 }

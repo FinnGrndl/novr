@@ -12,7 +12,7 @@ public readonly struct ReleaseVersion
         if (string.IsNullOrWhiteSpace(lines[0]))
             throw new ArgumentException("Meta data couldn't find version on first line.", nameof(meta));
         
-        Version = lines[0].Trim();
+        Version = NormalizeVersion(lines[0].Trim());
         
         
         string[] versionParts = Version.Split('.');
@@ -35,6 +35,20 @@ public readonly struct ReleaseVersion
     public int Major { get; }
     public int Minor { get; }
     public int Patch { get; }
+
+    public static bool TryParse(string? meta, out ReleaseVersion version)
+    {
+        try
+        {
+            version = new ReleaseVersion(meta ?? string.Empty);
+            return true;
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException or OverflowException)
+        {
+            version = default;
+            return false;
+        }
+    }
     
     public static bool operator ==(ReleaseVersion lhs, ReleaseVersion rhs)
     {
@@ -78,8 +92,31 @@ public readonly struct ReleaseVersion
         return new ReleaseVersion(file);
     }
 
+    public override bool Equals(object? obj)
+    {
+        return obj is ReleaseVersion other && this == other;
+    }
+
+    public override int GetHashCode()
+    {
+        return HashCode.Combine(Major, Minor, Patch);
+    }
+
     public override string ToString()
     {
         return Version;
+    }
+
+    private static string NormalizeVersion(string version)
+    {
+        if (version.StartsWith("v", StringComparison.OrdinalIgnoreCase) &&
+            version.Length > 1 &&
+            char.IsDigit(version[1]))
+        {
+            version = version[1..];
+        }
+
+        var suffixIndex = version.IndexOfAny(new[] { '-', '+' });
+        return suffixIndex >= 0 ? version[..suffixIndex] : version;
     }
 }
