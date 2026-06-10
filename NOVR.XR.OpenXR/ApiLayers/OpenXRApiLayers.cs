@@ -379,7 +379,7 @@ namespace UnityEngine.XR.OpenXR
 
                 // Parse the JSON manifest
                 string jsonContent = File.ReadAllText(jsonPath);
-                var layerManifest = JsonUtility.FromJson<ApiLayerManifestJson>(jsonContent);
+                var layerManifest = ParseManifestJson(jsonContent);
 
                 if (string.IsNullOrEmpty(layerManifest.api_layer.name) || string.IsNullOrEmpty(layerManifest.api_layer.api_version) || string.IsNullOrEmpty(layerManifest.api_layer.library_path))
                 {
@@ -646,7 +646,7 @@ namespace UnityEngine.XR.OpenXR
 
                     // Read the manifest to find the associated library file
                     string content = File.ReadAllText(jsonPath);
-                    var layerManifest = JsonUtility.FromJson<ApiLayerManifestJson>(content);
+                    var layerManifest = ParseManifestJson(content);
 
                     if (layerManifest.api_layer.name == layerName)
                     {
@@ -689,6 +689,29 @@ namespace UnityEngine.XR.OpenXR
                 string jsonDir = Path.GetDirectoryName(jsonPath);
                 return Path.GetFullPath(Path.Combine(jsonDir, libraryPath));
             }
+        }
+
+        static ApiLayerManifestJson ParseManifestJson(string jsonContent)
+        {
+            return new ApiLayerManifestJson
+            {
+                file_format_version = ReadJsonString(jsonContent, "file_format_version"),
+                api_layer = new ApiLayerJson
+                {
+                    name = ReadJsonString(jsonContent, "name"),
+                    library_path = ReadJsonString(jsonContent, "library_path"),
+                    api_version = ReadJsonString(jsonContent, "api_version"),
+                    implementation_version = ReadJsonString(jsonContent, "implementation_version"),
+                    description = ReadJsonString(jsonContent, "description")
+                }
+            };
+        }
+
+        static string ReadJsonString(string jsonContent, string propertyName)
+        {
+            var pattern = $"\"{Regex.Escape(propertyName)}\"\\s*:\\s*\"((?:\\\\.|[^\"])*)\"";
+            var match = Regex.Match(jsonContent, pattern, RegexOptions.CultureInvariant);
+            return match.Success ? Regex.Unescape(match.Groups[1].Value) : string.Empty;
         }
     }
 
