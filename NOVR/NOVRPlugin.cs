@@ -18,7 +18,7 @@ namespace NOVR;
 [BepInPlugin(
     "deltawing.novr",
     "NOVR",
-    "0.3.1")]
+    "0.4.0")]
 public class NOVRPlugin : BaseUnityPlugin
 {
     
@@ -27,6 +27,7 @@ public class NOVRPlugin : BaseUnityPlugin
 
     public NOVRPlugin()
     {
+        
         InputTracking.trackingAcquired += TrackingAcquired;
         _instance = this;
         ModFolderPath = Path.GetDirectoryName(Assembly.GetAssembly(typeof(NOVRPlugin)).Location);

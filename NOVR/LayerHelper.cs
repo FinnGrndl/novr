@@ -1,88 +1,53 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace NOVR;
 
 public static class LayerHelper
 {
-    private static int _freeLayer = -1;
-    private static int _captureLayer = -1;
     
-    // Unity only lets you define 32 layers.
-    // This is annoying because it's useful for us to create layers for some VR-specific stuff.
-    // We try to find a free layer (one without a name), but some games use all 32 layers.
-    // In that case, we need to fall back to something else.
-    private static int FindFreeLayer(params int[] excludedLayers)
+    
+    // Check me on game updates!!
+    [Flags]
+    public enum Layers
     {
-        for (var layer = 31; layer >= 0; layer--)
-        {
-            if (LayerMask.LayerToName(layer).Length != 0) continue;
-            if (IsExcludedLayer(layer, excludedLayers)) continue;
-            if (LayerHasSceneObjects(layer)) continue;
-
-            Debug.Log($"Found free layer: {layer}");
-            return layer;
-        }
-
-        Debug.LogWarning("Failed to find a free layer to use for VR UI. Falling back to last layer.");
-        return 31;
+        
+        // Base game
+        Default = 1 << 0,
+        TransparentFX = 1 << 1,
+        IgnoreRaycast = 1 << 2,
+        Cockpit = 1 << 3,
+        Water = 1 << 4,
+        UI = 1 << 5,
+        Statics = 1 << 6,
+        PP = 1 << 7,
+        TargetCamPP = 1 << 8,
+        HUD = 1 << 9,
+        Effects = 1 << 10,
+        Ship = 1 << 11,
+        Sun = 1 << 12,
+        ExclusionZones = 1 << 13,
+        CockpitAndExternal = 1 << 14,
+        IgnoreCollision = 1 << 15,
+        PreviewRender = 1 << 16,
+        EditorSelectOnly = 1 << 17,
+        GrassBlockerProxy = 1 << 18,
+        
+        
+        
+        // Ours
+        VrUi = 1 << 30,
+        VrUiCapture = 1 << 31,
     }
 
-    private static bool IsExcludedLayer(int layer, int[] excludedLayers)
+    public static Layers GetVrUiLayer() => Layers.VrUi;
+
+    public static Layers GetVrUiCaptureLayer() => Layers.VrUiCapture;
+
+    public static void SetLayerRecursive(Transform transform, Layers layer)
     {
-        for (var index = 0; index < excludedLayers.Length; index++)
-        {
-            if (excludedLayers[index] == layer)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool LayerHasSceneObjects(int layer)
-    {
-        var gameObjects = Object.FindObjectsOfType<GameObject>();
-        for (var index = 0; index < gameObjects.Length; index++)
-        {
-            if (gameObjects[index].layer == layer)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static int GetFreeLayerCached()
-    {
-        if (_freeLayer == -1)
-        {
-            _freeLayer = FindFreeLayer();
-        }
-
-        return _freeLayer;
-    }
-
-    public static int GetVrUiLayer()
-    {
-        return 25;
-        return GetFreeLayerCached();
-    }
-
-    public static int GetVrUiCaptureLayer()
-    {
-        if (_captureLayer == -1)
-        {
-            _captureLayer = FindFreeLayer(GetVrUiLayer());
-        }
-
-        return _captureLayer;
-    }
-
-    public static void SetLayerRecursive(Transform transform, int layer)
-    {
-        transform.gameObject.layer = layer;
+        transform.gameObject.layer = (int)layer;
 
         // Not using the usual foreach Transform etc because it fails in silly il2cpp.
         for (var index = 0; index < transform.childCount; index++)

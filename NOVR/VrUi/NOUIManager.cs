@@ -88,7 +88,7 @@ public class NOUIManager : NOVRBehaviour
         camera.depth = depth;
         camera.allowHDR = false;
         camera.allowMSAA = false;
-        camera.cullingMask = 1 << LayerHelper.GetVrUiLayer();
+        camera.cullingMask = 1 << (int)LayerHelper.GetVrUiLayer();
         additionalCameraData.renderType = CameraRenderType.Overlay;
 
         return camera;
