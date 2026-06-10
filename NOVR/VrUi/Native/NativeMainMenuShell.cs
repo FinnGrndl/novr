@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -11,6 +12,8 @@ public class NativeMainMenuShell : MonoBehaviour
     private static readonly Color ButtonHoverColor = new(0.34f, 0.40f, 0.42f, 1f);
     private static readonly Color ButtonPressedColor = new(0.16f, 0.20f, 0.22f, 1f);
     private static readonly Color ExitButtonColor = new(0.62f, 0.12f, 0.14f, 0.96f);
+    private const float PrimaryButtonStartY = 250f;
+    private const float PrimaryButtonSpacingY = 68f;
 
     private NativeGameActionAdapter? _actions;
     private RectTransform? _rectTransform;
@@ -19,14 +22,16 @@ public class NativeMainMenuShell : MonoBehaviour
     private GameObject? _sourceMainCanvas;
     private GameObject? _sourceBackgroundObject;
     private Font? _font;
+    private Action? _openVrUiSettings;
     private int _sourceBackgroundGraphicId;
     private BackgroundGraphicKind _sourceBackgroundKind;
     private bool _loggedMissingBackground;
 
-    public void Initialize(NativeGameActionAdapter actions, RectTransform rectTransform)
+    public void Initialize(NativeGameActionAdapter actions, RectTransform rectTransform, Action openVrUiSettings)
     {
         _actions = actions;
         _rectTransform = rectTransform;
+        _openVrUiSettings = openVrUiSettings;
         _font = Resources.GetBuiltinResource<Font>("Arial.ttf");
         BuildLayout();
     }
@@ -40,31 +45,34 @@ public class NativeMainMenuShell : MonoBehaviour
         _container = container.gameObject;
 
         CreateImage("Background", container, BackgroundColor, Vector2.zero, container.sizeDelta);
+        CreateText("Header", container, "MAIN MENU", new Vector2(0f, NativeUiLayout.HeaderY), NativeUiLayout.HeaderSize, 22, TextAnchor.MiddleCenter, Color.white);
         CreateText("Game Title", container, "NUCLEAR OPTION", new Vector2(760f, 470f), new Vector2(440f, 60f), 40, TextAnchor.MiddleRight, Color.white);
 
         var rail = CreatePanel("Main Menu Rail", container, PanelColor, new Vector2(-850f, -15f), new Vector2(250f, 950f));
-        CreateText("Menu Header", rail, "NOVR", new Vector2(0f, 420f), new Vector2(210f, 38f), 24, TextAnchor.MiddleCenter, Color.white);
+        CreateLogo("Menu Header Logo", rail, new Vector2(0f, 405f), new Vector2(118f, 118f));
+        CreateText("Menu Header", rail, "NOVR", new Vector2(0f, 325f), new Vector2(210f, 30f), 20, TextAnchor.MiddleCenter, Color.white);
 
         var primaryButtons = new[]
         {
-            new MenuAction("SINGLE PLAYER", NativeGameAction.SinglePlayer),
-            new MenuAction("MULTIPLAYER", NativeGameAction.Multiplayer),
-            new MenuAction("SETTINGS", NativeGameAction.Settings),
-            new MenuAction("ENCYCLOPEDIA", NativeGameAction.Encyclopedia),
-            new MenuAction("WORKSHOP", NativeGameAction.Workshop)
+            new MenuButton("SINGLE PLAYER", () => InvokeAction(NativeGameAction.SinglePlayer)),
+            new MenuButton("MULTIPLAYER", () => InvokeAction(NativeGameAction.Multiplayer)),
+            new MenuButton("SETTINGS", () => InvokeAction(NativeGameAction.Settings)),
+            new MenuButton("VR UI SETTINGS", OpenVrUiSettings),
+            new MenuButton("ENCYCLOPEDIA", () => InvokeAction(NativeGameAction.Encyclopedia)),
+            new MenuButton("WORKSHOP", () => InvokeAction(NativeGameAction.Workshop))
         };
 
         for (var index = 0; index < primaryButtons.Length; index++)
         {
-            var action = primaryButtons[index];
+            var button = primaryButtons[index];
             CreateMenuButton(
-                action.Label,
+                button.Label,
                 rail,
-                new Vector2(0f, 290f - index * 68f),
+                new Vector2(0f, PrimaryButtonStartY - index * PrimaryButtonSpacingY),
                 new Vector2(205f, 44f),
                 ButtonColor,
-                () => InvokeAction(action.Action),
-                16);
+                () => button.Action.Invoke(),
+                button.Label.Length > 12 ? 14 : 16);
         }
 
         CreateMenuButton(
@@ -101,6 +109,7 @@ public class NativeMainMenuShell : MonoBehaviour
         var tipPanel = CreatePanel("Menu Tip", container, new Color(0.02f, 0.025f, 0.032f, 0.88f), new Vector2(320f, -430f), new Vector2(650f, 92f));
         CreateText("Tip Title", tipPanel, "Did you know?", new Vector2(0f, 24f), new Vector2(600f, 24f), 15, TextAnchor.MiddleCenter, Color.white);
         CreateText("Tip Body", tipPanel, "The SAH-46 Chicane is much better protected against machine gun fire than other aircraft.", new Vector2(0f, -12f), new Vector2(590f, 40f), 14, TextAnchor.MiddleCenter, new Color(0.8f, 0.86f, 0.88f, 1f));
+        NativePanelTransition.SetVisible(container, false, instant: true);
     }
 
     public void SetOriginalMainCanvas(GameObject? sourceMainCanvas)
@@ -126,15 +135,20 @@ public class NativeMainMenuShell : MonoBehaviour
             SyncSourceBackground();
         }
 
-        if (_container != null && _container.activeSelf != visible)
+        if (_containerTransform != null)
         {
-            _container.SetActive(visible);
+            NativePanelTransition.SetVisible(_containerTransform, visible);
         }
     }
 
     private void InvokeAction(NativeGameAction action)
     {
         _actions?.TryInvoke(action);
+    }
+
+    private void OpenVrUiSettings()
+    {
+        _openVrUiSettings?.Invoke();
     }
 
     private void SyncSourceBackground()
@@ -325,6 +339,25 @@ public class NativeMainMenuShell : MonoBehaviour
         return rectTransform;
     }
 
+    private void CreateLogo(string name, RectTransform parent, Vector2 anchoredPosition, Vector2 size)
+    {
+        var texture = NativeMainMenuLogo.GetTexture();
+        if (texture == null) return;
+
+        var gameObject = new GameObject(name);
+        gameObject.transform.SetParent(parent, false);
+        LayerHelper.SetLayerRecursive(gameObject.transform, LayerHelper.GetVrUiLayer());
+
+        var rectTransform = gameObject.AddComponent<RectTransform>();
+        rectTransform.sizeDelta = size;
+        rectTransform.anchoredPosition = anchoredPosition;
+
+        var image = gameObject.AddComponent<RawImage>();
+        image.texture = texture;
+        image.color = Color.white;
+        image.raycastTarget = false;
+    }
+
     private void CreateText(string name, RectTransform parent, string text, Vector2 anchoredPosition, Vector2 size, int fontSize, TextAnchor alignment, Color color)
     {
         var gameObject = new GameObject(name);
@@ -352,14 +385,7 @@ public class NativeMainMenuShell : MonoBehaviour
         button.targetGraphic = rectTransform.GetComponent<Image>();
         button.onClick.AddListener(onClick);
 
-        var colors = button.colors;
-        colors.normalColor = color;
-        colors.highlightedColor = ButtonHoverColor;
-        colors.pressedColor = ButtonPressedColor;
-        colors.selectedColor = ButtonHoverColor;
-        colors.disabledColor = new Color(0.16f, 0.18f, 0.19f, 0.55f);
-        colors.colorMultiplier = 1f;
-        button.colors = colors;
+        NativeButtonFeedback.Configure(button, color);
 
         CreateText($"{label} Text", rectTransform, label, Vector2.zero, size, fontSize, TextAnchor.MiddleCenter, Color.white);
     }
@@ -394,5 +420,17 @@ public class NativeMainMenuShell : MonoBehaviour
 
         public string Label { get; }
         public NativeGameAction Action { get; }
+    }
+
+    private readonly struct MenuButton
+    {
+        public MenuButton(string label, Action action)
+        {
+            Label = label;
+            Action = action;
+        }
+
+        public string Label { get; }
+        public Action Action { get; }
     }
 }

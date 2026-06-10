@@ -77,17 +77,14 @@ public class NativeWorkshopPanel : MonoBehaviour
         }
 
         _wasVisible = visible;
-        if (_container.gameObject.activeSelf != visible)
-        {
-            _container.gameObject.SetActive(visible);
-        }
+        NativePanelTransition.SetVisible(_container, visible);
     }
 
     private void BuildLayout(RectTransform root)
     {
         _container = CreateContainer("Native Workshop", root, root.sizeDelta);
         CreateImage("Background", _container, BackgroundColor, Vector2.zero, _container.sizeDelta);
-        CreateText("Header", _container, "WORKSHOP", new Vector2(0f, 505f), new Vector2(1200f, 32f), 22, TextAnchor.MiddleCenter, Color.white);
+        CreateText("Header", _container, "WORKSHOP", new Vector2(0f, NativeUiLayout.HeaderY), NativeUiLayout.HeaderSize, 22, TextAnchor.MiddleCenter, Color.white);
 
         var listPanel = CreatePanel("Workshop List Panel", _container, PanelColor, new Vector2(-425f, -15f), new Vector2(1030f, 950f));
         CreateText("List Header", listPanel, "BROWSE ITEMS", new Vector2(0f, 420f), new Vector2(940f, 30f), 18, TextAnchor.MiddleCenter, Color.white);
@@ -134,13 +131,13 @@ public class NativeWorkshopPanel : MonoBehaviour
         CreateMenuButton("STEAM PAGE", detailsPanel, new Vector2(0f, -410f), new Vector2(170f, 38f), ButtonColor, OpenSelectedSteamPage, 13);
         _openLocalButton = CreateMenuButton("LOCAL FILES", detailsPanel, new Vector2(240f, -410f), new Vector2(170f, 38f), ButtonColor, OpenSelectedLocalFiles, 13);
 
-        CreateMenuButton("BACK", _container, new Vector2(-860f, -520f), new Vector2(190f, 44f), BackButtonColor, BackToMainMenu, 15);
-        CreateMenuButton("UPDATE ALL", _container, new Vector2(860f, -520f), new Vector2(190f, 44f), ActionButtonColor, UpdateAllSubscribed, 14);
+        CreateMenuButton("BACK", _container, new Vector2(NativeUiLayout.FooterLeftX, NativeUiLayout.FooterY), NativeUiLayout.FooterButtonSize, BackButtonColor, BackToMainMenu, 15);
+        CreateMenuButton("UPDATE ALL", _container, new Vector2(NativeUiLayout.FooterRightX, NativeUiLayout.FooterY), NativeUiLayout.FooterButtonSize, ActionButtonColor, UpdateAllSubscribed, 14);
 
-        _statusText = CreateText("Status", _container, "", new Vector2(0f, -520f), new Vector2(960f, 42f), 13, TextAnchor.MiddleCenter, new Color(0.84f, 0.90f, 0.92f, 1f));
+        _statusText = CreateText("Status", _container, "", new Vector2(0f, -468f), new Vector2(960f, 34f), 13, TextAnchor.MiddleCenter, new Color(0.84f, 0.90f, 0.92f, 1f));
         RefreshStaticLabels();
         SelectItem(-1);
-        _container.gameObject.SetActive(false);
+        NativePanelTransition.SetVisible(_container, false, instant: true);
     }
 
     private void CreateTabButton(RectTransform parent, WorkshopTab tab, string label, Vector2 anchoredPosition)
@@ -655,14 +652,7 @@ public class NativeWorkshopPanel : MonoBehaviour
         button.targetGraphic = rectTransform.GetComponent<Image>();
         button.onClick.AddListener(onClick);
 
-        var colors = button.colors;
-        colors.normalColor = color;
-        colors.highlightedColor = ButtonHoverColor;
-        colors.pressedColor = ButtonPressedColor;
-        colors.selectedColor = ButtonHoverColor;
-        colors.disabledColor = DisabledButtonColor;
-        colors.colorMultiplier = 1f;
-        button.colors = colors;
+        NativeButtonFeedback.Configure(button, color, DisabledButtonColor);
         return button;
     }
 
@@ -674,9 +664,7 @@ public class NativeWorkshopPanel : MonoBehaviour
             image.color = color;
         }
 
-        var colors = button.colors;
-        colors.normalColor = color;
-        button.colors = colors;
+        NativeButtonFeedback.SetNormalColor(button, color, DisabledButtonColor);
     }
 
     private static bool ContainsSearchTerm(string value, string term)

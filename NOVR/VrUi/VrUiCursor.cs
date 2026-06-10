@@ -46,13 +46,28 @@ public class VrUiCursor: NOVRBehaviour
     private const float MaxYawDegrees = 65f;
     private const float MaxPitchDegrees = 45f;
     private const float DefaultProjectionDistance = 5;
+    private const float CursorCanvasScale = 0.001f;
     private const int CursorTextureSize = 64;
     private const float CursorRingRadius = 12f;
     private const float CursorRingThickness = 4f;
+    private const float CursorIdlePulseScale = 0.035f;
+    private const float CursorIdlePulseSpeed = 5.5f;
+    private const float CursorHoverScale = 1.18f;
+    private const float CursorPressedScale = 0.84f;
+    private const float CursorClickPulseScale = 0.22f;
+    private const float CursorClickPulseDuration = 0.18f;
+    private const float CursorAnimationLerpSpeed = 24f;
+    private static readonly Color CursorNormalColor = new Color32(100, 200, 100, 255);
+    private static readonly Color CursorHoverColor = new Color32(155, 255, 175, 255);
+    private static readonly Color CursorPressedColor = new Color32(255, 224, 92, 255);
     private GameObject? _cursor;
     private RectTransform? _cursorRectTransform;
     private Canvas? _cursorCanvas;
     private RawImage? _cursorImage;
+    private bool _cursorOverInteractive;
+    private float _lastCursorClickTime = -100f;
+    private bool _hasProjectionReferenceOverride;
+    private Quaternion _projectionReferenceRotation = Quaternion.identity;
 
     private bool _hasInitializedEventSystem = false;
     private Mouse? _virtualMouse;
@@ -81,6 +96,17 @@ public class VrUiCursor: NOVRBehaviour
             return new Vector2(screenX, screenY);
         }
         return Vector2.zero;
+    }
+
+    public void SetProjectionReferenceRotation(Quaternion referenceRotation)
+    {
+        _projectionReferenceRotation = referenceRotation;
+        _hasProjectionReferenceOverride = true;
+    }
+
+    public void ClearProjectionReferenceRotation()
+    {
+        _hasProjectionReferenceOverride = false;
     }
     
     
@@ -130,6 +156,8 @@ public class VrUiCursor: NOVRBehaviour
         var realMouse = _realMouse;
         if (realMouse == null || _virtualMouse == null) return;
 
+        UpdateCursorAnimation(realMouse);
+
         var screenPoint = GetScreenPoint();
 
         ushort buttons = 0;
@@ -177,7 +205,7 @@ public class VrUiCursor: NOVRBehaviour
         float cursorYaw = ProjectYawAngle(mousePos.x);        
         
         Vector3 localDirection = Quaternion.Euler(-cursorPitch, cursorYaw, 0f) * Vector3.forward;
-        Quaternion referenceRotation = transform.parent != null ? transform.parent.rotation : Quaternion.identity;
+        Quaternion referenceRotation = GetProjectionReferenceRotation();
         Vector3 worldDirection = referenceRotation * localDirection;
         Vector3 viewportSpace = camera.WorldToViewportPoint(camera.transform.position + worldDirection * DefaultProjectionDistance, Camera.MonoOrStereoscopicEye.Mono);
         Vector2 inScreenSpace = new Vector2(viewportSpace.x * Screen.width, viewportSpace.y * Screen.height);
@@ -185,6 +213,16 @@ public class VrUiCursor: NOVRBehaviour
         Vector3 pos = camera.transform.position + worldDirection * cursorDistance;
         _cursor.transform.position = pos;
         _cursor.transform.rotation = Quaternion.LookRotation(worldDirection, camera.transform.up);
+    }
+
+    private Quaternion GetProjectionReferenceRotation()
+    {
+        if (_hasProjectionReferenceOverride)
+        {
+            return _projectionReferenceRotation;
+        }
+
+        return transform.parent != null ? transform.parent.rotation : Quaternion.identity;
     }
     
     private void EnsureCursorCanvas(Camera uiCaptureCamera)
@@ -194,13 +232,12 @@ public class VrUiCursor: NOVRBehaviour
             if (_cursorImage != null)
             {
                 _cursorImage.texture = _texture;
-                _cursorImage.color = Color.white;
             }
             return;
         }
 
         _cursor = new GameObject("VrUiCursorCanvas");
-        _cursor.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
+        _cursor.transform.localScale = Vector3.one * CursorCanvasScale;
         _cursorCanvas = _cursor.AddComponent<Canvas>();
         _cursorCanvas.renderMode = RenderMode.WorldSpace;
         _cursorCanvas.planeDistance = Mathf.Max(uiCaptureCamera.nearClipPlane + 0.01f, 0.11f);
@@ -209,10 +246,11 @@ public class VrUiCursor: NOVRBehaviour
         _cursorCanvas.pixelPerfect = true;
 
         _cursorRectTransform = _cursor.GetComponent<RectTransform>();
+        _cursorRectTransform.sizeDelta = new Vector2(CursorTextureSize, CursorTextureSize);
         _cursorImage = _cursor.AddComponent<RawImage>();
         _cursorImage.raycastTarget = false;
         _cursorImage.texture = _texture;
-        _cursorImage.color = Color.white;
+        _cursorImage.color = CursorNormalColor;
         LayerHelper.SetLayerRecursive(_cursor.transform, LayerHelper.GetVrUiLayer());
         
         
@@ -223,17 +261,20 @@ public class VrUiCursor: NOVRBehaviour
 
     private float GetDistanceUnderCursor(Vector2 screenPos)
     {
-        if (TryGetUiDistanceUnderCursor(screenPos, out var uiDistance))
+        _cursorOverInteractive = false;
+        if (TryGetUiDistanceUnderCursor(screenPos, out var uiDistance, out var overInteractive))
         {
+            _cursorOverInteractive = overInteractive;
             return uiDistance;
         }
 
         return DefaultProjectionDistance;
     }
 
-    private bool TryGetUiDistanceUnderCursor(Vector2 screenPos, out float distance)
+    private bool TryGetUiDistanceUnderCursor(Vector2 screenPos, out float distance, out bool overInteractive)
     {
         distance = default;
+        overInteractive = false;
 
         if (EventSystem.current == null)
         {
@@ -260,6 +301,7 @@ public class VrUiCursor: NOVRBehaviour
                 continue;
             }
 
+            overInteractive = IsInteractiveRaycastTarget(result.gameObject);
             distance = result.worldPosition == Vector3.zero
                 ? result.distance
                 : Vector3.Distance(cameraPos, result.worldPosition);
@@ -268,6 +310,62 @@ public class VrUiCursor: NOVRBehaviour
         }
 
         return false;
+    }
+
+    private static bool IsInteractiveRaycastTarget(GameObject gameObject)
+    {
+        var selectable = gameObject.GetComponentInParent<Selectable>();
+        if (selectable != null)
+        {
+            return selectable.IsInteractable();
+        }
+
+        return ExecuteEvents.GetEventHandler<IPointerClickHandler>(gameObject) != null ||
+               ExecuteEvents.GetEventHandler<IPointerDownHandler>(gameObject) != null ||
+               ExecuteEvents.GetEventHandler<ISubmitHandler>(gameObject) != null ||
+               ExecuteEvents.GetEventHandler<IDragHandler>(gameObject) != null;
+    }
+
+    private void UpdateCursorAnimation(Mouse realMouse)
+    {
+        if (_cursor == null || _cursorImage == null) return;
+
+        if (realMouse.leftButton.wasPressedThisFrame)
+        {
+            _lastCursorClickTime = Time.unscaledTime;
+        }
+
+        var isPressed = realMouse.leftButton.isPressed;
+        var idlePulse = Mathf.Sin(Time.unscaledTime * CursorIdlePulseSpeed) * CursorIdlePulseScale;
+        var clickProgress = Mathf.Clamp01((Time.unscaledTime - _lastCursorClickTime) / CursorClickPulseDuration);
+        var clickPulse = clickProgress < 1f
+            ? Mathf.Sin((1f - clickProgress) * Mathf.PI) * CursorClickPulseScale
+            : 0f;
+
+        var targetVisualScale = 1f + idlePulse + clickPulse;
+        if (_cursorOverInteractive)
+        {
+            targetVisualScale *= CursorHoverScale;
+        }
+        if (isPressed)
+        {
+            targetVisualScale *= CursorPressedScale;
+        }
+
+        var targetScale = Vector3.one * (CursorCanvasScale * targetVisualScale);
+        _cursor.transform.localScale = Vector3.Lerp(_cursor.transform.localScale, targetScale, Time.unscaledDeltaTime * CursorAnimationLerpSpeed);
+
+        var targetColor = CursorNormalColor;
+        if (_cursorOverInteractive)
+        {
+            targetColor = CursorHoverColor;
+        }
+        if (isPressed)
+        {
+            targetColor = CursorPressedColor;
+        }
+
+        _cursorImage.color = Color.Lerp(_cursorImage.color, targetColor, Time.unscaledDeltaTime * CursorAnimationLerpSpeed);
     }
 
 
@@ -297,7 +395,6 @@ public class VrUiCursor: NOVRBehaviour
         var center = new Vector2((CursorTextureSize - 1) * 0.5f, (CursorTextureSize - 1) * 0.5f);
         var innerRadius = CursorRingRadius - CursorRingThickness * 0.5f;
         var outerRadius = CursorRingRadius + CursorRingThickness * 0.5f;
-        var green = new Color32(100, 200, 100, 255);
         var transparent = new Color32(0, 0, 0, 0);
 
         for (var y = 0; y < CursorTextureSize; y++)
@@ -306,7 +403,7 @@ public class VrUiCursor: NOVRBehaviour
             {
                 var distanceFromCenter = Vector2.Distance(new Vector2(x, y), center);
                 var isRing = distanceFromCenter >= innerRadius && distanceFromCenter <= outerRadius;
-                colors[y * CursorTextureSize + x] = isRing ? green : transparent;
+                colors[y * CursorTextureSize + x] = isRing ? Color.white : transparent;
             }
         }
 

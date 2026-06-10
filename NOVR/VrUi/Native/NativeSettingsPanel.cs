@@ -11,10 +11,14 @@ public class NativeSettingsPanel : MonoBehaviour
 {
     private const float RowStartY = 350f;
     private const float RowSpacing = 42f;
-    private const int BindingPageSize = 10;
+    private const float BindingScrollViewportHeight = 430f;
+    private const float BindingScrollRowHeight = 40f;
+    private const float BindingScrollIndicatorHeight = 430f;
+    private const float BindingScrollIndicatorMinThumbHeight = 42f;
+    private const float BindingActivePollSeconds = 0.08f;
+    private const float BindingAxisValueRefreshSeconds = 0.08f;
     private const float BindingCaptureDelaySeconds = 0.25f;
     private const float BindingCaptureTimeoutSeconds = 8f;
-    private const string AllBindingsFilterKey = "ALL";
 
     private static readonly Color BackgroundColor = new(0.025f, 0.035f, 0.045f, 0.93f);
     private static readonly Color PanelColor = new(0.05f, 0.06f, 0.065f, 0.94f);
@@ -26,6 +30,7 @@ public class NativeSettingsPanel : MonoBehaviour
     private static readonly Color ApplyButtonColor = new(0.12f, 0.34f, 0.20f, 0.96f);
 
     private readonly Dictionary<SettingsTab, Button> _tabButtons = new();
+    private readonly Dictionary<BindingEntry, Text> _bindingAxisValueTexts = new();
     private readonly List<BindingEntry> _bindingEntries = new();
     private readonly List<BindingDeviceFilter> _bindingDeviceFilters = new();
 
@@ -38,10 +43,14 @@ public class NativeSettingsPanel : MonoBehaviour
     private BindingEntry? _queuedBinding;
     private BindingEntry? _activeBinding;
     private float _queuedBindingStartTime;
-    private int _bindingPage;
     private int _bindingDeviceFilterIndex;
     private BindingVisibilityFilter _bindingVisibilityFilter = BindingVisibilityFilter.All;
     private bool _bindingEntriesDirty = true;
+    private float _bindingScrollOffset;
+    private float _nextBindingActivePollTime;
+    private float _nextBindingAxisValueUpdateTime;
+    private string? _focusedBindingKey;
+    private string? _lastActiveBindingKey;
     private string _bindingStatus = "Select REMAP, release the mouse, then press the new input.";
     private float _nextRowY;
     private bool _wasVisible;
@@ -70,26 +79,34 @@ public class NativeSettingsPanel : MonoBehaviour
         }
 
         _wasVisible = visible;
-        if (_container.gameObject.activeSelf != visible)
-        {
-            _container.gameObject.SetActive(visible);
-        }
+        NativePanelTransition.SetVisible(_container, visible);
     }
 
     private void Update()
     {
-        if (_queuedBinding == null || Time.unscaledTime < _queuedBindingStartTime) return;
+        if (_queuedBinding != null && Time.unscaledTime >= _queuedBindingStartTime)
+        {
+            var binding = _queuedBinding;
+            _queuedBinding = null;
+            StartBindingCapture(binding);
+        }
 
-        var binding = _queuedBinding;
-        _queuedBinding = null;
-        StartBindingCapture(binding);
+        if (_wasVisible && _currentTab == SettingsTab.Bindings)
+        {
+            UpdateVisibleBindingAxisValues();
+
+            if (_queuedBinding == null && _activeBinding == null)
+            {
+                UpdateActiveBindingFocus();
+            }
+        }
     }
 
     private void BuildLayout(RectTransform root)
     {
         _container = CreateContainer("Native Settings", root, root.sizeDelta);
         CreateImage("Background", _container, BackgroundColor, Vector2.zero, _container.sizeDelta);
-        CreateText("Header", _container, "SETTINGS", new Vector2(0f, 505f), new Vector2(1200f, 34f), 22, TextAnchor.MiddleCenter, Color.white);
+        CreateText("Header", _container, "SETTINGS", new Vector2(0f, NativeUiLayout.HeaderY), NativeUiLayout.HeaderSize, 22, TextAnchor.MiddleCenter, Color.white);
 
         var tabPanel = CreatePanel("Settings Tabs", _container, PanelColor, new Vector2(-770f, -15f), new Vector2(280f, 950f));
         CreateText("Tab Header", tabPanel, "CATEGORY", new Vector2(0f, 420f), new Vector2(240f, 30f), 17, TextAnchor.MiddleCenter, Color.white);
@@ -103,12 +120,12 @@ public class NativeSettingsPanel : MonoBehaviour
         AddTabButton(tabPanel, SettingsTab.Chat, "CHAT", -15f);
 
         _contentRoot = CreatePanel("Settings Content", _container, PanelColor, new Vector2(170f, -15f), new Vector2(1440f, 950f));
-        CreateMenuButton("BACK", _container, new Vector2(-860f, -520f), new Vector2(190f, 44f), BackButtonColor, BackToMainMenu, 15);
-        CreateMenuButton("APPLY", _container, new Vector2(860f, -520f), new Vector2(190f, 44f), ApplyButtonColor, ApplyAndSave, 15);
+        CreateMenuButton("BACK", _container, new Vector2(NativeUiLayout.FooterLeftX, NativeUiLayout.FooterY), NativeUiLayout.FooterButtonSize, BackButtonColor, BackToMainMenu, 15);
+        CreateMenuButton("APPLY", _container, new Vector2(NativeUiLayout.FooterRightX, NativeUiLayout.FooterY), NativeUiLayout.FooterButtonSize, ApplyButtonColor, ApplyAndSave, 15);
 
         SetActiveTabButtonColors();
         RenderCurrentTab();
-        _container.gameObject.SetActive(false);
+        NativePanelTransition.SetVisible(_container, false, instant: true);
     }
 
     private void AddTabButton(RectTransform parent, SettingsTab tab, string label, float y)
@@ -184,6 +201,8 @@ public class NativeSettingsPanel : MonoBehaviour
     private void ClearContent()
     {
         if (_contentRoot == null) return;
+
+        _bindingAxisValueTexts.Clear();
 
         for (var index = _contentRoot.childCount - 1; index >= 0; index--)
         {
@@ -306,33 +325,11 @@ public class NativeSettingsPanel : MonoBehaviour
             return;
         }
 
-        _nextRowY = 172f;
-        var pageCount = Mathf.Max(1, Mathf.CeilToInt(visibleEntries.Count / (float)BindingPageSize));
-        _bindingPage = ClampInt(_bindingPage, 0, pageCount - 1);
-
-        var startIndex = _bindingPage * BindingPageSize;
-        var endIndex = Mathf.Min(startIndex + BindingPageSize, visibleEntries.Count);
-        for (var index = startIndex; index < endIndex; index++)
-        {
-            AddBindingRow(visibleEntries[index]);
-        }
-
-        var footerY = -300f;
-        CreateMenuButton("<", _contentRoot, new Vector2(-165f, footerY), new Vector2(56f, 32f), ButtonColor, () =>
-        {
-            _bindingPage = ClampInt(_bindingPage - 1, 0, pageCount - 1);
-            RenderCurrentTab();
-        }, 16);
-        CreateText("Bindings Page", _contentRoot, $"PAGE {_bindingPage + 1} / {pageCount}", new Vector2(0f, footerY), new Vector2(210f, 32f), 14, TextAnchor.MiddleCenter, Color.white);
-        CreateMenuButton(">", _contentRoot, new Vector2(165f, footerY), new Vector2(56f, 32f), ButtonColor, () =>
-        {
-            _bindingPage = ClampInt(_bindingPage + 1, 0, pageCount - 1);
-            RenderCurrentTab();
-        }, 16);
+        RenderBindingScrollList(visibleEntries);
 
         if (_queuedBinding != null || _activeBinding != null)
         {
-            CreateMenuButton("CANCEL", _contentRoot, new Vector2(410f, footerY), new Vector2(120f, 32f), BackButtonColor, () =>
+            CreateMenuButton("CANCEL", _contentRoot, new Vector2(520f, -300f), new Vector2(120f, 32f), BackButtonColor, () =>
             {
                 CancelBindingCapture("Binding capture canceled.");
                 RenderCurrentTab();
@@ -340,6 +337,125 @@ public class NativeSettingsPanel : MonoBehaviour
         }
 
         CreateText("Bindings Status", _contentRoot, _bindingStatus, new Vector2(0f, -345f), new Vector2(880f, 30f), 13, TextAnchor.MiddleCenter, new Color(0.84f, 0.90f, 0.92f, 1f));
+    }
+
+    private void RenderBindingScrollList(IList<BindingEntry> visibleEntries)
+    {
+        if (_contentRoot == null) return;
+
+        CreateBindingColumnHeader();
+
+        var viewportSize = new Vector2(1250f, BindingScrollViewportHeight);
+        var viewport = CreateImage("Bindings Scroll Viewport", _contentRoot, new Color(0.03f, 0.04f, 0.045f, 0.72f), new Vector2(0f, -44f), viewportSize);
+        viewport.gameObject.AddComponent<Mask>().showMaskGraphic = false;
+        var scrollThumb = CreateBindingScrollIndicator();
+
+        var scrollRect = viewport.gameObject.AddComponent<ScrollRect>();
+        scrollRect.horizontal = false;
+        scrollRect.vertical = true;
+        scrollRect.movementType = ScrollRect.MovementType.Clamped;
+        scrollRect.scrollSensitivity = 34f;
+        scrollRect.viewport = viewport;
+
+        var contentHeight = Mathf.Max(viewportSize.y, visibleEntries.Count * BindingScrollRowHeight);
+        var content = CreateContainer("Bindings Scroll Content", viewport, new Vector2(viewportSize.x, contentHeight));
+        content.anchorMin = new Vector2(0.5f, 1f);
+        content.anchorMax = new Vector2(0.5f, 1f);
+        content.pivot = new Vector2(0.5f, 1f);
+        content.anchoredPosition = Vector2.zero;
+        scrollRect.content = content;
+
+        var focusIndex = GetFocusedBindingIndex(visibleEntries);
+        if (focusIndex >= 0)
+        {
+            _bindingScrollOffset = GetScrollOffsetForFocusedRow(focusIndex, contentHeight, viewportSize.y);
+        }
+
+        _bindingScrollOffset = Mathf.Clamp(_bindingScrollOffset, 0f, Mathf.Max(0f, contentHeight - viewportSize.y));
+        content.anchoredPosition = new Vector2(0f, _bindingScrollOffset);
+        UpdateBindingScrollIndicator(scrollThumb, contentHeight, viewportSize.y);
+
+        scrollRect.onValueChanged.AddListener(_ =>
+        {
+            _bindingScrollOffset = Mathf.Clamp(content.anchoredPosition.y, 0f, Mathf.Max(0f, contentHeight - viewportSize.y));
+            UpdateBindingScrollIndicator(scrollThumb, contentHeight, viewportSize.y);
+        });
+
+        for (var index = 0; index < visibleEntries.Count; index++)
+        {
+            AddBindingRow(visibleEntries[index], content, index);
+        }
+    }
+
+    private RectTransform? CreateBindingScrollIndicator()
+    {
+        if (_contentRoot == null) return null;
+
+        var track = CreateImage("Bindings Scroll Indicator Track", _contentRoot, new Color(0.16f, 0.18f, 0.19f, 0.70f), new Vector2(642f, -44f), new Vector2(10f, BindingScrollIndicatorHeight));
+        var thumb = CreateImage("Bindings Scroll Indicator Thumb", track, new Color(0.54f, 0.62f, 0.64f, 0.94f), Vector2.zero, new Vector2(8f, BindingScrollIndicatorHeight));
+        thumb.anchorMin = new Vector2(0.5f, 0.5f);
+        thumb.anchorMax = new Vector2(0.5f, 0.5f);
+        thumb.pivot = new Vector2(0.5f, 0.5f);
+        return thumb;
+    }
+
+    private void UpdateBindingScrollIndicator(RectTransform? thumb, float contentHeight, float viewportHeight)
+    {
+        if (thumb == null) return;
+
+        var maxOffset = Mathf.Max(0f, contentHeight - viewportHeight);
+        var trackHeight = BindingScrollIndicatorHeight;
+        var thumbHeight = maxOffset <= 0f
+            ? trackHeight
+            : Mathf.Clamp(trackHeight * viewportHeight / Mathf.Max(viewportHeight, contentHeight), BindingScrollIndicatorMinThumbHeight, trackHeight);
+        var travel = Mathf.Max(0f, trackHeight - thumbHeight);
+        var scrollRatio = maxOffset <= 0f ? 0f : Mathf.Clamp01(_bindingScrollOffset / maxOffset);
+
+        thumb.sizeDelta = new Vector2(8f, thumbHeight);
+        thumb.anchoredPosition = new Vector2(0f, travel * 0.5f - scrollRatio * travel);
+
+        var image = thumb.GetComponent<Image>();
+        if (image != null)
+        {
+            image.color = maxOffset <= 0f
+                ? new Color(0.34f, 0.40f, 0.42f, 0.42f)
+                : new Color(0.54f, 0.62f, 0.64f, 0.94f);
+        }
+    }
+
+    private void CreateBindingColumnHeader()
+    {
+        if (_contentRoot == null) return;
+
+        const float y = 178f;
+        CreateText("Bindings Header Action", _contentRoot, "ACTION", new Vector2(-470f, y), new Vector2(240f, 24f), 12, TextAnchor.MiddleLeft, new Color(0.68f, 0.76f, 0.78f, 1f));
+        CreateText("Bindings Header Source", _contentRoot, "SOURCE", new Vector2(-205f, y), new Vector2(160f, 24f), 12, TextAnchor.MiddleCenter, new Color(0.68f, 0.76f, 0.78f, 1f));
+        CreateText("Bindings Header Binding", _contentRoot, "BINDING", new Vector2(45f, y), new Vector2(220f, 24f), 12, TextAnchor.MiddleCenter, new Color(0.68f, 0.76f, 0.78f, 1f));
+        CreateText("Bindings Header Value", _contentRoot, "VALUE", new Vector2(220f, y), new Vector2(90f, 24f), 12, TextAnchor.MiddleCenter, new Color(0.68f, 0.76f, 0.78f, 1f));
+    }
+
+    private int GetFocusedBindingIndex(IList<BindingEntry> visibleEntries)
+    {
+        if (string.IsNullOrWhiteSpace(_focusedBindingKey))
+        {
+            return -1;
+        }
+
+        for (var index = 0; index < visibleEntries.Count; index++)
+        {
+            if (visibleEntries[index].Key == _focusedBindingKey)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static float GetScrollOffsetForFocusedRow(int rowIndex, float contentHeight, float viewportHeight)
+    {
+        var centeredOffset = rowIndex * BindingScrollRowHeight - viewportHeight * 0.45f + BindingScrollRowHeight;
+        return Mathf.Clamp(centeredOffset, 0f, Mathf.Max(0f, contentHeight - viewportHeight));
     }
 
     private void RenderBindingDeviceFilter()
@@ -382,7 +498,7 @@ public class NativeSettingsPanel : MonoBehaviour
             _bindingDeviceFilterIndex = 0;
         }
 
-        _bindingPage = 0;
+        ResetBindingScroll();
         RenderCurrentTab();
     }
 
@@ -401,7 +517,7 @@ public class NativeSettingsPanel : MonoBehaviour
         }
 
         _bindingVisibilityFilter = (BindingVisibilityFilter)next;
-        _bindingPage = 0;
+        ResetBindingScroll();
         RenderCurrentTab();
     }
 
@@ -419,7 +535,7 @@ public class NativeSettingsPanel : MonoBehaviour
     {
         if (_bindingDeviceFilters.Count == 0)
         {
-            return new BindingDeviceFilter(AllBindingsFilterKey, "ALL DEVICES");
+            return new BindingDeviceFilter(string.Empty, "NO DEVICE");
         }
 
         _bindingDeviceFilterIndex = ClampInt(_bindingDeviceFilterIndex, 0, _bindingDeviceFilters.Count - 1);
@@ -433,7 +549,7 @@ public class NativeSettingsPanel : MonoBehaviour
         for (var index = 0; index < _bindingEntries.Count; index++)
         {
             var entry = _bindingEntries[index];
-            if ((filter.Key == AllBindingsFilterKey || entry.DeviceKey == filter.Key) && IsBindingVisible(entry))
+            if (entry.DeviceKey == filter.Key && IsBindingVisible(entry))
             {
                 visibleEntries.Add(entry);
             }
@@ -450,6 +566,13 @@ public class NativeSettingsPanel : MonoBehaviour
             BindingVisibilityFilter.Unassigned => !entry.IsAssigned,
             _ => true
         };
+    }
+
+    private void ResetBindingScroll()
+    {
+        _bindingScrollOffset = 0f;
+        _focusedBindingKey = null;
+        _lastActiveBindingKey = null;
     }
 
     private void RenderHudTab()
@@ -575,25 +698,56 @@ public class NativeSettingsPanel : MonoBehaviour
         CreateMenuButton(buttonLabel, _contentRoot, new Vector2(310f, y), new Vector2(170f, 32f), ButtonColor, action, 14);
     }
 
-    private void AddBindingRow(BindingEntry entry)
+    private void AddBindingRow(BindingEntry entry, RectTransform parent, int rowIndex)
     {
-        if (_contentRoot == null) return;
-
-        var y = ConsumeRowY();
+        var y = -BindingScrollRowHeight * rowIndex - BindingScrollRowHeight * 0.5f;
+        var active = IsBindingButtonInputActive(entry);
         var pending = ReferenceEquals(_queuedBinding, entry) || ReferenceEquals(_activeBinding, entry);
+        var rowColor = active
+            ? new Color(0.18f, 0.35f, 0.22f, 0.88f)
+            : pending
+                ? new Color(0.22f, 0.25f, 0.28f, 0.88f)
+                : rowIndex % 2 == 0
+                    ? new Color(0.075f, 0.085f, 0.09f, 0.58f)
+                    : new Color(0.055f, 0.065f, 0.07f, 0.52f);
+
+        AnchorBindingRowElement(CreateImage($"{entry.Key} Row", parent, rowColor, new Vector2(0f, y), new Vector2(1210f, 36f)));
+
         var remapLabel = pending ? "..." : entry.IsAssigned ? "REMAP" : "ASSIGN";
         var bindingColor = entry.IsAssigned ? Color.white : new Color(0.96f, 0.82f, 0.42f, 1f);
+        if (active)
+        {
+            bindingColor = new Color(0.80f, 1f, 0.72f, 1f);
+        }
 
-        CreateText($"{entry.Key} Action", _contentRoot, entry.DisplayName, new Vector2(-385f, y), new Vector2(300f, 32f), 13, TextAnchor.MiddleLeft, Color.white);
-        CreateText($"{entry.Key} Source", _contentRoot, $"{entry.ControllerLabel} {entry.BindingKind}", new Vector2(-110f, y), new Vector2(210f, 32f), 11, TextAnchor.MiddleCenter, new Color(0.78f, 0.84f, 0.86f, 1f));
-        CreateText($"{entry.Key} Binding", _contentRoot, entry.BindingName, new Vector2(135f, y), new Vector2(260f, 32f), 13, TextAnchor.MiddleCenter, bindingColor);
+        AnchorBindingRowElement(CreateText($"{entry.Key} Action", parent, entry.DisplayName, new Vector2(-470f, y), new Vector2(270f, 32f), 13, TextAnchor.MiddleLeft, Color.white).rectTransform);
+        AnchorBindingRowElement(CreateText($"{entry.Key} Source", parent, $"{entry.ControllerLabel} {entry.BindingKind}", new Vector2(-205f, y), new Vector2(190f, 32f), 11, TextAnchor.MiddleCenter, new Color(0.78f, 0.84f, 0.86f, 1f)).rectTransform);
+        AnchorBindingRowElement(CreateText($"{entry.Key} Binding", parent, entry.BindingName, new Vector2(45f, y), new Vector2(220f, 32f), 13, TextAnchor.MiddleCenter, bindingColor).rectTransform);
+        if (entry.CanShowAxisValue)
+        {
+            var axisText = CreateText($"{entry.Key} Axis Value", parent, GetBindingAxisValueText(entry), new Vector2(220f, y), new Vector2(90f, 32f), 12, TextAnchor.MiddleCenter, new Color(0.82f, 0.92f, 1f, 1f));
+            AnchorBindingRowElement(axisText.rectTransform);
+            _bindingAxisValueTexts[entry] = axisText;
+        }
 
         if (entry.CanInvert)
         {
-            CreateMenuButton(entry.IsInverted ? "INV ON" : "INV", _contentRoot, new Vector2(315f, y), new Vector2(80f, 32f), entry.IsInverted ? ApplyButtonColor : ButtonColor, () => ToggleBindingInvert(entry), 11);
+            AnchorBindingRowElement((RectTransform)CreateMenuButton(entry.IsInverted ? "INV ON" : "INV", parent, new Vector2(310f, y), new Vector2(76f, 30f), entry.IsInverted ? ApplyButtonColor : ButtonColor, () => ToggleBindingInvert(entry), 11).transform);
         }
 
-        CreateMenuButton(remapLabel, _contentRoot, new Vector2(430f, y), new Vector2(105f, 32f), pending ? ButtonSelectedColor : ButtonColor, () => QueueBindingCapture(entry), 12);
+        if (entry.IsAssigned)
+        {
+            AnchorBindingRowElement((RectTransform)CreateMenuButton("CLEAR", parent, new Vector2(405f, y), new Vector2(82f, 30f), BackButtonColor, () => ClearBinding(entry), 11).transform);
+        }
+
+        AnchorBindingRowElement((RectTransform)CreateMenuButton(remapLabel, parent, new Vector2(520f, y), new Vector2(105f, 30f), pending ? ButtonSelectedColor : ButtonColor, () => QueueBindingCapture(entry), 12).transform);
+    }
+
+    private static void AnchorBindingRowElement(RectTransform rectTransform)
+    {
+        rectTransform.anchorMin = new Vector2(0.5f, 1f);
+        rectTransform.anchorMax = new Vector2(0.5f, 1f);
+        rectTransform.pivot = new Vector2(0.5f, 0.5f);
     }
 
     private void AddReadOnlyRow(string label)
@@ -634,10 +788,11 @@ public class NativeSettingsPanel : MonoBehaviour
     {
         if (!_bindingEntriesDirty) return;
 
+        var selectedDeviceKey = GetSelectedBindingDeviceKey();
         _bindingEntriesDirty = false;
         _bindingEntries.Clear();
         _bindingDeviceFilters.Clear();
-        _bindingDeviceFilters.Add(new BindingDeviceFilter(AllBindingsFilterKey, "ALL DEVICES"));
+        _bindingDeviceFilterIndex = 0;
 
         try
         {
@@ -660,16 +815,48 @@ public class NativeSettingsPanel : MonoBehaviour
             }
 
             _bindingEntries.Sort(static (left, right) => string.Compare(left.SortKey, right.SortKey, StringComparison.OrdinalIgnoreCase));
-            _bindingDeviceFilterIndex = ClampInt(_bindingDeviceFilterIndex, 0, _bindingDeviceFilters.Count - 1);
+            RestoreBindingDeviceFilter(selectedDeviceKey);
         }
         catch (Exception exception)
         {
             Debug.LogWarning($"[NOVR] Native settings failed to load control bindings: {exception}");
             _bindingEntries.Clear();
             _bindingDeviceFilters.Clear();
-            _bindingDeviceFilters.Add(new BindingDeviceFilter(AllBindingsFilterKey, "ALL DEVICES"));
             _bindingDeviceFilterIndex = 0;
         }
+    }
+
+    private string? GetSelectedBindingDeviceKey()
+    {
+        if (_bindingDeviceFilters.Count == 0)
+        {
+            return null;
+        }
+
+        _bindingDeviceFilterIndex = ClampInt(_bindingDeviceFilterIndex, 0, _bindingDeviceFilters.Count - 1);
+        return _bindingDeviceFilters[_bindingDeviceFilterIndex].Key;
+    }
+
+    private void RestoreBindingDeviceFilter(string? selectedDeviceKey)
+    {
+        if (_bindingDeviceFilters.Count == 0)
+        {
+            _bindingDeviceFilterIndex = 0;
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(selectedDeviceKey))
+        {
+            for (var index = 0; index < _bindingDeviceFilters.Count; index++)
+            {
+                if (_bindingDeviceFilters[index].Key != selectedDeviceKey) continue;
+
+                _bindingDeviceFilterIndex = index;
+                return;
+            }
+        }
+
+        _bindingDeviceFilterIndex = ClampInt(_bindingDeviceFilterIndex, 0, _bindingDeviceFilters.Count - 1);
     }
 
     private void AddDeviceBindingEntries<TMap>(IEnumerable<TMap> maps, string deviceKey, string controllerLabel)
@@ -729,7 +916,7 @@ public class NativeSettingsPanel : MonoBehaviour
     {
         if (maps.Count == 0) return;
 
-        var assignedActionIds = new HashSet<int>();
+        var assignedActionSlots = new HashSet<string>();
         var preferredMapByActionCategory = new Dictionary<int, ControllerMap>();
         var fallbackMap = maps[0];
 
@@ -745,7 +932,10 @@ public class NativeSettingsPanel : MonoBehaviour
 
                 if (actionElementMap.enabled)
                 {
-                    assignedActionIds.Add(mappedAction.id);
+                    var assignedActionRange = mappedAction.type == InputActionType.Axis
+                        ? GetActionRange(actionElementMap)
+                        : AxisRange.Positive;
+                    AddAssignedActionSlot(assignedActionSlots, mappedAction.id, assignedActionRange);
                 }
 
                 if (!preferredMapByActionCategory.ContainsKey(mappedAction.categoryId))
@@ -757,23 +947,30 @@ public class NativeSettingsPanel : MonoBehaviour
 
         foreach (var action in ReInput.mapping.UserAssignableActions)
         {
-            if (action == null || !action.userAssignable || assignedActionIds.Contains(action.id)) continue;
+            if (action == null || !action.userAssignable) continue;
 
             if (!preferredMapByActionCategory.TryGetValue(action.categoryId, out var controllerMap))
             {
                 controllerMap = fallbackMap;
             }
 
-            _bindingEntries.Add(new BindingEntry(
-                controllerMap,
-                action,
-                deviceKey,
-                controllerLabel,
-                GetActionCategoryName(action),
-                GetActionDisplayName(action),
-                "UNASSIGNED",
-                GetDefaultBindingKind(action),
-                GetDefaultActionRange(action)));
+            var actionRanges = GetAssignableActionRanges(action);
+            for (var index = 0; index < actionRanges.Count; index++)
+            {
+                var actionRange = actionRanges[index];
+                if (IsActionRangeAssigned(assignedActionSlots, action.id, actionRange)) continue;
+
+                _bindingEntries.Add(new BindingEntry(
+                    controllerMap,
+                    action,
+                    deviceKey,
+                    controllerLabel,
+                    GetActionCategoryName(action),
+                    GetActionDisplayName(action, actionRange),
+                    "UNASSIGNED",
+                    GetDefaultBindingKind(action, actionRange),
+                    actionRange));
+            }
         }
     }
 
@@ -800,6 +997,32 @@ public class NativeSettingsPanel : MonoBehaviour
         _queuedBinding = entry;
         _queuedBindingStartTime = Time.unscaledTime + BindingCaptureDelaySeconds;
         _bindingStatus = $"Release the mouse, then press a new input or move an axis for {entry.DisplayName}.";
+        RenderCurrentTab();
+    }
+
+    private void ClearBinding(BindingEntry entry)
+    {
+        CancelBindingCapture(null);
+        if (!entry.IsAssigned || entry.ActionElementMap == null)
+        {
+            return;
+        }
+
+        try
+        {
+            entry.ControllerMap.DeleteElementMap(entry.ActionElementMap.id);
+            SaveRewiredBindings();
+            _bindingEntriesDirty = true;
+            _focusedBindingKey = null;
+            _lastActiveBindingKey = null;
+            _bindingStatus = $"Cleared {entry.DisplayName} binding {entry.BindingName}.";
+        }
+        catch (Exception exception)
+        {
+            _bindingStatus = $"Could not clear {entry.DisplayName}.";
+            Debug.LogWarning($"[NOVR] Native settings failed to clear binding '{entry.DisplayName}' on '{entry.ControllerLabel}': {exception}");
+        }
+
         RenderCurrentTab();
     }
 
@@ -876,6 +1099,101 @@ public class NativeSettingsPanel : MonoBehaviour
         _bindingEntriesDirty = true;
         _bindingStatus = $"{entry.DisplayName} axis invert {(entry.ActionElementMap.invert ? "enabled" : "disabled")}.";
         RenderCurrentTab();
+    }
+
+    private void UpdateActiveBindingFocus()
+    {
+        if (Time.unscaledTime < _nextBindingActivePollTime) return;
+        _nextBindingActivePollTime = Time.unscaledTime + BindingActivePollSeconds;
+
+        if (!ReInput.isReady || GameManager.playerInput == null)
+        {
+            return;
+        }
+
+        EnsureBindingEntriesLoaded();
+        var visibleEntries = GetVisibleBindingEntries();
+        BindingEntry? activeEntry = null;
+        for (var index = 0; index < visibleEntries.Count; index++)
+        {
+            if (!IsBindingButtonInputActive(visibleEntries[index])) continue;
+
+            activeEntry = visibleEntries[index];
+            break;
+        }
+
+        var activeKey = activeEntry?.Key;
+        if (activeKey == _lastActiveBindingKey)
+        {
+            return;
+        }
+
+        _lastActiveBindingKey = activeKey;
+        _focusedBindingKey = activeKey;
+        if (activeEntry != null)
+        {
+            _bindingStatus = $"Pressed input is bound to {activeEntry.DisplayName}.";
+        }
+
+        RenderCurrentTab();
+    }
+
+    private void UpdateVisibleBindingAxisValues()
+    {
+        if (Time.unscaledTime < _nextBindingAxisValueUpdateTime) return;
+        _nextBindingAxisValueUpdateTime = Time.unscaledTime + BindingAxisValueRefreshSeconds;
+
+        foreach (var pair in _bindingAxisValueTexts)
+        {
+            if (pair.Value == null) continue;
+
+            pair.Value.text = GetBindingAxisValueText(pair.Key);
+        }
+    }
+
+    private static bool IsBindingButtonInputActive(BindingEntry entry)
+    {
+        if (!entry.IsAssigned || GameManager.playerInput == null || !ReInput.isReady)
+        {
+            return false;
+        }
+
+        if (entry.ActionType != InputActionType.Button || entry.ActionElementMap?.elementType == ControllerElementType.Axis)
+        {
+            return false;
+        }
+
+        try
+        {
+            return GameManager.playerInput.GetButton(entry.ActionId);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private static string GetBindingAxisValueText(BindingEntry entry)
+    {
+        if (!entry.CanShowAxisValue || GameManager.playerInput == null || !ReInput.isReady)
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            var value = GameManager.playerInput.GetAxis(entry.ActionId);
+            if (Mathf.Abs(value) < 0.005f)
+            {
+                value = 0f;
+            }
+
+            return $"{value:+0.00;-0.00;0.00}";
+        }
+        catch (Exception)
+        {
+            return "--";
+        }
     }
 
     private void OnBindingMapped(InputMapper.InputMappedEventData eventData)
@@ -1021,6 +1339,24 @@ public class NativeSettingsPanel : MonoBehaviour
         return $"Action {action.id}";
     }
 
+    private static string GetActionDisplayName(InputAction action, AxisRange actionRange)
+    {
+        if (action.type == InputActionType.Axis)
+        {
+            if (actionRange == AxisRange.Negative && !string.IsNullOrWhiteSpace(action.negativeDescriptiveName))
+            {
+                return action.negativeDescriptiveName;
+            }
+
+            if (actionRange == AxisRange.Positive && !string.IsNullOrWhiteSpace(action.positiveDescriptiveName))
+            {
+                return action.positiveDescriptiveName;
+            }
+        }
+
+        return GetActionDisplayName(action);
+    }
+
     private static string GetActionDisplayName(InputAction? action, ActionElementMap actionElementMap)
     {
         if (!string.IsNullOrWhiteSpace(actionElementMap.actionDescriptiveName))
@@ -1095,14 +1431,70 @@ public class NativeSettingsPanel : MonoBehaviour
         return actionElementMap.invert ? "AXIS INV" : "AXIS";
     }
 
-    private static string GetDefaultBindingKind(InputAction action)
+    private static string GetDefaultBindingKind(InputAction action, AxisRange actionRange)
     {
-        return action.type == InputActionType.Axis ? "AXIS" : "BTN";
+        if (action.type != InputActionType.Axis)
+        {
+            return "BTN";
+        }
+
+        return actionRange switch
+        {
+            AxisRange.Negative => "AXIS -",
+            AxisRange.Positive => "AXIS +",
+            _ => "AXIS"
+        };
     }
 
-    private static AxisRange GetDefaultActionRange(InputAction action)
+    private static List<AxisRange> GetAssignableActionRanges(InputAction action)
     {
-        return action.type == InputActionType.Axis ? AxisRange.Full : AxisRange.Positive;
+        var ranges = new List<AxisRange>();
+        if (action.type != InputActionType.Axis)
+        {
+            ranges.Add(AxisRange.Positive);
+            return ranges;
+        }
+
+        var hasNegative = !string.IsNullOrWhiteSpace(action.negativeDescriptiveName);
+        var hasPositive = !string.IsNullOrWhiteSpace(action.positiveDescriptiveName);
+
+        if (hasNegative || hasPositive)
+        {
+            if (hasNegative)
+            {
+                ranges.Add(AxisRange.Negative);
+            }
+
+            if (hasPositive)
+            {
+                ranges.Add(AxisRange.Positive);
+            }
+
+            return ranges;
+        }
+
+        ranges.Add(AxisRange.Full);
+        return ranges;
+    }
+
+    private static void AddAssignedActionSlot(HashSet<string> assignedActionSlots, int actionId, AxisRange actionRange)
+    {
+        assignedActionSlots.Add(GetBindingActionSlotKey(actionId, actionRange));
+        if (actionRange != AxisRange.Full) return;
+
+        assignedActionSlots.Add(GetBindingActionSlotKey(actionId, AxisRange.Negative));
+        assignedActionSlots.Add(GetBindingActionSlotKey(actionId, AxisRange.Positive));
+    }
+
+    private static bool IsActionRangeAssigned(HashSet<string> assignedActionSlots, int actionId, AxisRange actionRange)
+    {
+        return assignedActionSlots.Contains(GetBindingActionSlotKey(actionId, actionRange))
+            || assignedActionSlots.Contains(GetBindingActionSlotKey(actionId, AxisRange.Full));
+    }
+
+    private static string GetBindingActionSlotKey(int actionId, AxisRange actionRange)
+    {
+        return $"{actionId}:{actionRange}";
     }
 
     private static AxisRange GetActionRange(ActionElementMap actionElementMap)
@@ -1343,14 +1735,7 @@ public class NativeSettingsPanel : MonoBehaviour
         button.targetGraphic = rectTransform.GetComponent<Image>();
         button.onClick.AddListener(onClick);
 
-        var colors = button.colors;
-        colors.normalColor = color;
-        colors.highlightedColor = ButtonHoverColor;
-        colors.pressedColor = ButtonPressedColor;
-        colors.selectedColor = ButtonHoverColor;
-        colors.disabledColor = new Color(0.16f, 0.18f, 0.19f, 0.55f);
-        colors.colorMultiplier = 1f;
-        button.colors = colors;
+        NativeButtonFeedback.Configure(button, color);
 
         CreateText($"{label} Text", rectTransform, label, Vector2.zero, size, fontSize, TextAnchor.MiddleCenter, Color.white);
         return button;
@@ -1364,9 +1749,7 @@ public class NativeSettingsPanel : MonoBehaviour
             image.color = color;
         }
 
-        var colors = button.colors;
-        colors.normalColor = color;
-        button.colors = colors;
+        NativeButtonFeedback.SetNormalColor(button, color);
     }
 
     private enum SettingsTab
@@ -1404,6 +1787,7 @@ public class NativeSettingsPanel : MonoBehaviour
             ControllerMap = controllerMap;
             ActionElementMap = actionElementMap;
             ActionId = action.id;
+            ActionType = action.type;
             DeviceKey = deviceKey;
             ControllerLabel = controllerLabel;
             CategoryName = categoryName;
@@ -1429,6 +1813,7 @@ public class NativeSettingsPanel : MonoBehaviour
         {
             ControllerMap = controllerMap;
             ActionId = action.id;
+            ActionType = action.type;
             DeviceKey = deviceKey;
             ControllerLabel = controllerLabel;
             CategoryName = categoryName;
@@ -1438,12 +1823,13 @@ public class NativeSettingsPanel : MonoBehaviour
             ActionRange = actionRange;
             IsAssigned = false;
             SortKey = $"{DeviceKey}|{CategoryName}|{DisplayName}|{ControllerLabel}|{BindingName}";
-            Key = $"{DeviceKey}-{ActionId}-Unassigned-{ControllerMap.id}";
+            Key = $"{DeviceKey}-{ActionId}-Unassigned-{ActionRange}-{ControllerMap.id}";
         }
 
         public ControllerMap ControllerMap { get; }
         public ActionElementMap? ActionElementMap { get; }
         public int ActionId { get; }
+        public InputActionType ActionType { get; }
         public string DeviceKey { get; }
         public string ControllerLabel { get; }
         public string CategoryName { get; }
@@ -1455,6 +1841,7 @@ public class NativeSettingsPanel : MonoBehaviour
         public string SortKey { get; }
         public string Key { get; }
         public bool CanInvert => ActionElementMap != null && ActionElementMap.elementType == ControllerElementType.Axis && ActionElementMap.axisRange == AxisRange.Full;
+        public bool CanShowAxisValue => IsAssigned && ActionType == InputActionType.Axis;
         public bool IsInverted => ActionElementMap != null && ActionElementMap.invert;
     }
 

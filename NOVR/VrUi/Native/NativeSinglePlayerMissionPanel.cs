@@ -61,17 +61,14 @@ public class NativeSinglePlayerMissionPanel : MonoBehaviour
             LoadMissions();
         }
 
-        if (_container.gameObject.activeSelf != visible)
-        {
-            _container.gameObject.SetActive(visible);
-        }
+        NativePanelTransition.SetVisible(_container, visible);
     }
 
     private void BuildLayout(RectTransform root)
     {
         _container = CreateContainer("Native Single Player Missions", root, root.sizeDelta);
         CreateImage("Background", _container, BackgroundColor, Vector2.zero, _container.sizeDelta);
-        CreateText("Header", _container, "SINGLE PLAYER MISSIONS", new Vector2(0f, 505f), new Vector2(1200f, 32f), 22, TextAnchor.MiddleCenter, Color.white);
+        CreateText("Header", _container, "SINGLE PLAYER MISSIONS", new Vector2(0f, NativeUiLayout.HeaderY), NativeUiLayout.HeaderSize, 22, TextAnchor.MiddleCenter, Color.white);
 
         var listPanel = CreatePanel("Mission List Panel", _container, PanelColor, new Vector2(-480f, -15f), new Vector2(820f, 950f));
         CreateText("List Header", listPanel, "SELECT MISSION", new Vector2(0f, 430f), new Vector2(760f, 30f), 18, TextAnchor.MiddleCenter, Color.white);
@@ -105,11 +102,11 @@ public class NativeSinglePlayerMissionPanel : MonoBehaviour
         _tagsText = CreateText("Mission Tags", detailsPanel, "", new Vector2(0f, 345f), new Vector2(820f, 28f), 13, TextAnchor.MiddleCenter, new Color(0.82f, 0.86f, 0.72f, 1f));
         _descriptionText = CreateText("Mission Description", detailsPanel, "", new Vector2(0f, 60f), new Vector2(820f, 520f), 15, TextAnchor.UpperLeft, new Color(0.84f, 0.88f, 0.90f, 1f));
 
-        CreateMenuButton("BACK", _container, new Vector2(-860f, -520f), new Vector2(190f, 44f), BackButtonColor, BackToMainMenu, 15);
-        _customizeButton = CreateMenuButton("CUSTOMIZE MISSION", _container, new Vector2(540f, -520f), new Vector2(260f, 44f), ButtonColor, CustomizeSelectedMission, 14);
-        _startButton = CreateMenuButton("START MISSION", _container, new Vector2(830f, -520f), new Vector2(240f, 44f), StartButtonColor, StartSelectedMission, 15);
+        CreateMenuButton("BACK", _container, new Vector2(NativeUiLayout.FooterLeftX, NativeUiLayout.FooterY), NativeUiLayout.FooterButtonSize, BackButtonColor, BackToMainMenu, 15);
+        _customizeButton = CreateMenuButton("CUSTOMIZE MISSION", _container, new Vector2(540f, NativeUiLayout.FooterY), new Vector2(260f, 44f), ButtonColor, CustomizeSelectedMission, 14);
+        _startButton = CreateMenuButton("START MISSION", _container, new Vector2(830f, NativeUiLayout.FooterY), new Vector2(240f, 44f), StartButtonColor, StartSelectedMission, 15);
 
-        _container.gameObject.SetActive(false);
+        NativePanelTransition.SetVisible(_container, false, instant: true);
     }
 
     private void BuildGroupFilters(RectTransform listPanel)
@@ -476,14 +473,7 @@ public class NativeSinglePlayerMissionPanel : MonoBehaviour
         button.targetGraphic = rectTransform.GetComponent<Image>();
         button.onClick.AddListener(onClick);
 
-        var colors = button.colors;
-        colors.normalColor = color;
-        colors.highlightedColor = ButtonHoverColor;
-        colors.pressedColor = ButtonPressedColor;
-        colors.selectedColor = ButtonHoverColor;
-        colors.disabledColor = new Color(0.16f, 0.18f, 0.19f, 0.55f);
-        colors.colorMultiplier = 1f;
-        button.colors = colors;
+        NativeButtonFeedback.Configure(button, color);
 
         CreateText($"{label} Text", rectTransform, label, Vector2.zero, size, fontSize, alignment, Color.white);
         return button;
@@ -497,9 +487,7 @@ public class NativeSinglePlayerMissionPanel : MonoBehaviour
             image.color = color;
         }
 
-        var colors = button.colors;
-        colors.normalColor = color;
-        button.colors = colors;
+        NativeButtonFeedback.SetNormalColor(button, color);
     }
 
     private enum MissionGroupFilter
