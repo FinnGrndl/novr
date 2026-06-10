@@ -14,31 +14,31 @@ public static class LayerHelper
     {
         
         // Base game
-        Default = 1 << 0,
-        TransparentFX = 1 << 1,
-        IgnoreRaycast = 1 << 2,
-        Cockpit = 1 << 3,
-        Water = 1 << 4,
-        UI = 1 << 5,
-        Statics = 1 << 6,
-        PP = 1 << 7,
-        TargetCamPP = 1 << 8,
-        HUD = 1 << 9,
-        Effects = 1 << 10,
-        Ship = 1 << 11,
-        Sun = 1 << 12,
-        ExclusionZones = 1 << 13,
-        CockpitAndExternal = 1 << 14,
-        IgnoreCollision = 1 << 15,
-        PreviewRender = 1 << 16,
-        EditorSelectOnly = 1 << 17,
-        GrassBlockerProxy = 1 << 18,
+        Default = 0,
+        TransparentFX = 1,
+        IgnoreRaycast = 2,
+        Cockpit = 3,
+        Water = 4,
+        UI = 5,
+        Statics = 6,
+        PP = 7,
+        TargetCamPP =8,
+        HUD = 9,
+        Effects = 10,
+        Ship = 11,
+        Sun = 12,
+        ExclusionZones = 13,
+        CockpitAndExternal = 14,
+        IgnoreCollision = 15,
+        PreviewRender = 16,
+        EditorSelectOnly = 17,
+        GrassBlockerProxy = 18,
         
         
         
         // Ours
-        VrUi = 1 << 30,
-        VrUiCapture = 1 << 31,
+        VrUi = 30,
+        VrUiCapture = 31,
     }
 
     public static Layers GetVrUiLayer() => Layers.VrUi;
