@@ -41,15 +41,65 @@ jobs:
           if [ -n "$NUCLEAR_OPTION_REFERENCES_URL" ]; then
             refs_dir="$RUNNER_TEMP/nuclear-option-references"
             refs_zip="$RUNNER_TEMP/nuclear-option-references.zip"
+            release_json="$RUNNER_TEMP/nuclear-option-reference-release.json"
             rm -rf "$refs_dir"
             mkdir -p "$refs_dir"
 
-            curl_args=(-fL "$NUCLEAR_OPTION_REFERENCES_URL" -o "$refs_zip")
-            if [ -n "$NUCLEAR_OPTION_REFERENCES_TOKEN" ]; then
-              curl_args=(-H "Authorization: Bearer $NUCLEAR_OPTION_REFERENCES_TOKEN" "${curl_args[@]}")
+            if [[ -n "$NUCLEAR_OPTION_REFERENCES_TOKEN" && "$NUCLEAR_OPTION_REFERENCES_URL" =~ ^https://github.com/([^/]+)/([^/]+)/releases/download/([^/]+)/(.+)$ ]]; then
+              refs_repo="${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+              refs_tag="${BASH_REMATCH[3]}"
+              refs_asset="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.unquote(sys.argv[1]))' "${BASH_REMATCH[4]}")"
+
+              echo "Downloading Nuclear Option reference asset '$refs_asset' from $refs_repo@$refs_tag."
+              if ! curl -fsSL \
+                -H "Authorization: Bearer $NUCLEAR_OPTION_REFERENCES_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/repos/$refs_repo/releases/tags/$refs_tag" \
+                -o "$release_json"; then
+                echo "::error::Failed to read private reference release $refs_repo@$refs_tag. Check that NUCLEAR_OPTION_REFERENCES_TOKEN can read that repository and that the tag exists."
+                exit 1
+              fi
+
+              refs_asset_url="$(python3 - "$release_json" "$refs_asset" <<'PY'
+          import json
+          import sys
+
+          release_path, asset_name = sys.argv[1], sys.argv[2]
+          with open(release_path, encoding="utf-8") as handle:
+              release = json.load(handle)
+
+          for asset in release.get("assets", []):
+              if asset.get("name") == asset_name:
+                  print(asset["url"])
+                  break
+          else:
+              print(f"::error::Could not find release asset: {asset_name}", file=sys.stderr)
+              sys.exit(1)
+          PY
+          )"
+
+              if ! curl -fsSL \
+                -H "Authorization: Bearer $NUCLEAR_OPTION_REFERENCES_TOKEN" \
+                -H "Accept: application/octet-stream" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "$refs_asset_url" \
+                -o "$refs_zip"; then
+                echo "::error::Failed to download private reference asset '$refs_asset'. Check token access and release asset permissions."
+                exit 1
+              fi
+            else
+              curl_args=(-fsSL "$NUCLEAR_OPTION_REFERENCES_URL" -o "$refs_zip")
+              if [ -n "$NUCLEAR_OPTION_REFERENCES_TOKEN" ]; then
+                curl_args=(-H "Authorization: Bearer $NUCLEAR_OPTION_REFERENCES_TOKEN" "${curl_args[@]}")
+              fi
+
+              if ! curl "${curl_args[@]}"; then
+                echo "::error::Failed to download the Nuclear Option reference archive from NUCLEAR_OPTION_REFERENCES_URL."
+                exit 1
+              fi
             fi
 
-            curl "${curl_args[@]}"
             unzip -q "$refs_zip" -d "$refs_dir"
 
             if [ -d "$refs_dir/NuclearOption_Data/Managed" ]; then
