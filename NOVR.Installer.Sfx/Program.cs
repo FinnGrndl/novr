@@ -1,11 +1,10 @@
 using System.Diagnostics;
 using System.IO.Compression;
-using System.Reflection;
 using System.Text;
 
 const string PayloadMarker = "\n__NOVR_SFX_PAYLOAD_v1__\n";
 
-var executablePath = Environment.ProcessPath ?? Assembly.GetExecutingAssembly().Location;
+var executablePath = Environment.ProcessPath ?? throw new InvalidOperationException("Could not resolve current executable path.");
 var payload = ReadPayload(executablePath);
 var extractionDirectory = Path.Combine(Path.GetTempPath(), "NOVR.Installer." + Guid.NewGuid().ToString("N"));
 

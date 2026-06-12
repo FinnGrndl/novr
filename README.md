@@ -75,6 +75,8 @@ These steps are for developers building NOVR from source.
     - **Windows:** Visual Studio 2022 or Build Tools for Visual Studio 2022 with the **.NET Framework 4.8 targeting pack** installed.
     - **Linux:** the .NET SDK plus Mono/MSBuild and .NET Framework reference assemblies. Distro package names vary, but you usually want packages such as `dotnet-sdk`, `mono`, `msbuild`/`mono-msbuild`, and `mono-reference-assemblies`/`.NET Framework 4.8 reference assemblies`.
 2. Have Nuclear Option installed at:
+    - **macOS/Steam:** `~/Library/Application Support/Steam/steamapps/common/Nuclear Option`
+    - **macOS/Sikarugir:** `~/Applications/Sikarugir/Untitled.app/Contents/SharedSupport/prefix/drive_c/Program Files (x86)/Steam/steamapps/common/Nuclear Option`
     - **Linux:** `~/.steam/steam/steamapps/common/Nuclear Option` OR `~/.steam/debian-installation/steamapps/common/Nuclear Option` OR `~/.local/share/Steam/steamapps/common/Nuclear Option`
     - **Windows:** `C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option` OR `C:\Program Files\Steam\steamapps\common\Nuclear Option` OR `D:\SteamLibrary\steamapps\common\Nuclear Option`
 
@@ -113,6 +115,19 @@ This fork publishes from the `release` branch. Push a version bump to `release` 
 - Create or update the GitHub release tagged from the version in `NOVR/NOVRPlugin.cs`.
 
 The installer reads published releases from `FinnGrndl/novr` and installs the exact `NOVR.zip` asset from the selected release.
+
+GitHub-hosted runners do not include Nuclear Option's managed DLLs, so release builds need one private reference source:
+
+- Use a self-hosted runner that has the game installed and set repository variable `NUCLEAR_OPTION_GAME_DIR` to the game folder.
+- Or create a stripped reference archive locally:
+
+    ```bash
+    scripts/create-reference-archive.sh "/path/to/Nuclear Option"
+    ```
+
+    Upload that zip somewhere private and set repository secret `NUCLEAR_OPTION_REFERENCES_URL` to its download URL. If the URL needs bearer authentication, also set `NUCLEAR_OPTION_REFERENCES_TOKEN`.
+
+Do not commit the reference archive or raw Nuclear Option DLLs to git.
 
 ## Generated docs
 

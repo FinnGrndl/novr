@@ -29,6 +29,52 @@ jobs:
         with:
           dotnet-version: 9.0.x
 
+      - name: Prepare Nuclear Option references
+        shell: bash
+        env:
+          NUCLEAR_OPTION_GAME_DIR_VAR: ${{ vars.NUCLEAR_OPTION_GAME_DIR }}
+          NUCLEAR_OPTION_REFERENCES_URL: ${{ secrets.NUCLEAR_OPTION_REFERENCES_URL }}
+          NUCLEAR_OPTION_REFERENCES_TOKEN: ${{ secrets.NUCLEAR_OPTION_REFERENCES_TOKEN }}
+        run: |
+          selected_game_dir="${NUCLEAR_OPTION_GAME_DIR:-${NUCLEAR_OPTION_GAME_DIR_VAR:-}}"
+
+          if [ -n "$NUCLEAR_OPTION_REFERENCES_URL" ]; then
+            refs_dir="$RUNNER_TEMP/nuclear-option-references"
+            refs_zip="$RUNNER_TEMP/nuclear-option-references.zip"
+            rm -rf "$refs_dir"
+            mkdir -p "$refs_dir"
+
+            curl_args=(-fL "$NUCLEAR_OPTION_REFERENCES_URL" -o "$refs_zip")
+            if [ -n "$NUCLEAR_OPTION_REFERENCES_TOKEN" ]; then
+              curl_args=(-H "Authorization: Bearer $NUCLEAR_OPTION_REFERENCES_TOKEN" "${curl_args[@]}")
+            fi
+
+            curl "${curl_args[@]}"
+            unzip -q "$refs_zip" -d "$refs_dir"
+
+            if [ -d "$refs_dir/NuclearOption_Data/Managed" ]; then
+              selected_game_dir="$refs_dir"
+            elif [ -d "$refs_dir/Managed" ]; then
+              mkdir -p "$refs_dir/NuclearOption_Data"
+              mv "$refs_dir/Managed" "$refs_dir/NuclearOption_Data/Managed"
+              selected_game_dir="$refs_dir"
+            elif compgen -G "$refs_dir/*.dll" >/dev/null; then
+              mkdir -p "$refs_dir/NuclearOption_Data/Managed"
+              mv "$refs_dir"/*.dll "$refs_dir/NuclearOption_Data/Managed/"
+              selected_game_dir="$refs_dir"
+            else
+              echo "::error::Reference archive must contain NuclearOption_Data/Managed, Managed, or DLL files at its root."
+              exit 1
+            fi
+          fi
+
+          if [ -z "$selected_game_dir" ] || [ ! -d "$selected_game_dir/NuclearOption_Data/Managed" ]; then
+            echo "::error::GitHub-hosted runners do not include Nuclear Option reference DLLs. Set repository secret NUCLEAR_OPTION_REFERENCES_URL to a private stripped-reference archive, or run this workflow on a runner where NUCLEAR_OPTION_GAME_DIR points at the game folder."
+            exit 1
+          fi
+
+          echo "NUCLEAR_OPTION_GAME_DIR=$selected_game_dir" >> "$GITHUB_ENV"
+
       - name: Resolve NOVR version
         id: version
         shell: bash

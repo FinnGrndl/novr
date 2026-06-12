@@ -15,6 +15,9 @@
         <RootNamespace>NOVR</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
+        <Reference Include="$(NuclearOptionFallbackLibDir)/*.dll" Condition=" '$(NuclearOptionGameDirResolved)' == 'NUCLEAR_OPTION_NOT_FOUND' " Exclude="$(NuclearOptionFallbackLibExcludes)">
+            <Private>False</Private>
+        </Reference>
         <ProjectReference Include="..\NOVR.XR.OpenXR\NOVR.XR.OpenXR.csproj" Private="false"/>
     </ItemGroup>
     <ItemGroup>
