@@ -66,8 +66,7 @@ internal sealed class NearTreeField
 
     private readonly Vector3[] _clumps;      // global coordinates, our own copy
     private readonly byte[] _flags;
-    private readonly Vector3[] _islands;     // tree offsets inside one clump
-    private readonly float _treeHeight;      // metres, measured off TreeClump1
+    private readonly Vector4[] _islands;     // per tree: offset inside the clump, and height
     private readonly float _clearMultiplier;
 
     // Uniform grid over the clumps, in the counting-sort layout: _cellItems is
@@ -106,15 +105,21 @@ internal sealed class NearTreeField
     internal int ClumpsHidden => _hiddenIds.Count;
     internal float LastRebuildMs { get; private set; }
 
+    /// <summary>Distance to the closest clump on the map, whether or not it was
+    /// taken. An empty near set with this at 4 km means the aircraft is over
+    /// water or a runway, not that the lookup is broken.</summary>
+    internal float NearestDistance { get; private set; }
+
+    internal Vector3 CameraGlobal { get; private set; }
+
     private NearTreeField(
         GraphicsBuffer positionBuffer, NearTreeAssets assets,
-        Vector3[] clumps, Vector3[] islands, float treeHeight, float clearMultiplier)
+        Vector3[] clumps, Vector4[] islands, float clearMultiplier)
     {
         _positionBuffer = positionBuffer;
         _assets = assets;
         _clumps = clumps;
         _islands = islands;
-        _treeHeight = treeHeight;
         _clearMultiplier = clearMultiplier;
         _flags = new byte[clumps.Length];
 
@@ -175,15 +180,15 @@ internal sealed class NearTreeField
 
         var clumps = ReadPositions(positions.bytes);
         var clumpMesh = AccessTools.Field(typeof(TreeRenderer), "mesh")?.GetValue(renderer) as Mesh;
-        var islands = ClumpLayout(clumpMesh, out var treeHeight);
+        var islands = ClumpLayout(clumpMesh, out var source);
 
         var multiplierField = AccessTools.Field(typeof(TreeRenderer), "clearTreeRadiusMultiplier");
         var multiplier = multiplierField != null ? (float)multiplierField.GetValue(renderer) : 0.3f;
 
-        Debug.Log($"[NOVR.NearTrees] {clumps.Length} clumps x {islands.Length} trees, "
-                  + $"{treeHeight:F1} m tall, blast clear x{multiplier:F2}.");
+        Debug.Log($"[NOVR.NearTrees] {clumps.Length} clumps x {islands.Length} trees ({source}), "
+                  + $"blast clear x{multiplier:F2}.");
 
-        return new NearTreeField(buffer, assets, clumps, islands, treeHeight, multiplier);
+        return new NearTreeField(buffer, assets, clumps, islands, multiplier);
     }
 
     private static unsafe Vector3[] ReadPositions(byte[] bytes)
@@ -211,7 +216,7 @@ internal sealed class NearTreeField
     /// nothing was ever meant to read on the CPU. That fallback puts trees in the
     /// right area but not on the same spots, so the crossover shifts them.</para>
     /// </summary>
-    private static Vector3[] ClumpLayout(Mesh? mesh, out float treeHeight)
+    private static Vector4[] ClumpLayout(Mesh? mesh, out string source)
     {
         if (mesh != null && mesh.isReadable)
         {
@@ -238,44 +243,26 @@ internal sealed class NearTreeField
 
             if (groups.Count > 0)
             {
-                var offsets = new Vector3[groups.Count];
-                var heights = new List<float>(groups.Count);
+                var offsets = new Vector4[groups.Count];
                 var index = 0;
                 foreach (var g in groups.Values)
                 {
                     var centre = g.sum / g.n;
                     // The base of the trunk, not the middle of the card: the mod's
                     // model is generated with its base at the origin.
-                    offsets[index++] = new Vector3(centre.x, g.minY, centre.z);
-                    heights.Add(g.maxY - g.minY);
+                    offsets[index++] = new Vector4(centre.x, g.minY, centre.z, g.maxY - g.minY);
                 }
 
-                heights.Sort();
-                treeHeight = heights[heights.Count / 2];
+                source = $"read from {mesh.name}";
                 return offsets;
             }
         }
 
-        // Fallback: 36 on a 6x6 jittered grid across the clump's bounds.
-        var bounds = mesh != null ? mesh.bounds : new Bounds(Vector3.zero, new Vector3(49f, 34f, 51f));
-        treeHeight = Mathf.Max(1f, bounds.size.y);
-        Debug.LogWarning("[NOVR.NearTrees] TreeClump1 is not CPU-readable; placing trees on a grid over its "
-                         + "bounds instead of on the game's own tree positions. They will be in the right "
-                         + "wood but not on the same spots.");
-
-        var grid = new Vector3[36];
-        var rng = new NearTreeModel.Lcg(0xC10E7Du);
-        for (var i = 0; i < 36; i++)
-        {
-            var gx = (i % 6 + 0.5f) / 6f;
-            var gz = (i / 6 + 0.5f) / 6f;
-            grid[i] = new Vector3(
-                Mathf.Lerp(bounds.min.x, bounds.max.x, gx) + rng.Range(-3f, 3f),
-                bounds.min.y,
-                Mathf.Lerp(bounds.min.z, bounds.max.z, gz) + rng.Range(-3f, 3f));
-        }
-
-        return grid;
+        // The shipped TreeClump1 is not CPU-readable, which is the normal import
+        // setting for a mesh nothing was meant to read back, so this is the path
+        // that actually runs. The table is the same measurement taken offline.
+        source = "baked TreeClump1 layout";
+        return NearTreeClumpLayout.TreeClump1;
     }
 
     private static int Find(int[] parent, int a)
@@ -316,6 +303,7 @@ internal sealed class NearTreeField
     {
         var origin = Datum.originPosition;
         var cameraGlobal = cameraScene - origin;
+        CameraGlobal = cameraGlobal;
 
         var radius = NearTreeConfig.Radius;
         var maxClumps = Mathf.Max(1, NearTreeConfig.Budget / _islands.Length);
@@ -366,12 +354,14 @@ internal sealed class NearTreeField
         }
 
         var count = 0;
+        var nearest = float.MaxValue;
         foreach (var id in _candidates)
         {
             if ((_flags[id] & FlagCleared) != 0) continue;
 
             var delta = _clumps[id] - cameraGlobal;
             var distance = delta.magnitude;
+            if (distance < nearest) nearest = distance;
 
             // Frayed radius, plus hysteresis so a clump sitting on the boundary
             // does not flicker between the two renderers every frame.
@@ -384,6 +374,7 @@ internal sealed class NearTreeField
             count++;
         }
 
+        NearestDistance = nearest;
         Array.Sort(_nearDist, _nearIds, 0, count);
         if (count > maxClumps) count = maxClumps;
 
@@ -454,7 +445,8 @@ internal sealed class NearTreeField
 
             for (var t = 0; t < _islands.Length; t++)
             {
-                var global = clump + _islands[t];
+                var island = _islands[t];
+                var global = clump + new Vector3(island.x, island.y, island.z);
                 var seed = (uint)clumpId * 0x9E3779B9u + (uint)t;
                 var variant = (int)(seed >> 28) % NearTreeModel.FullVariants;
 
@@ -466,7 +458,9 @@ internal sealed class NearTreeField
                     bucket = _matrices[variant];
                 }
 
-                var height = _treeHeight * (0.8f + 0.4f * Jitter((int)seed, 0x2545F491u));
+                // The clump already carries six distinct sizes between 15 m and
+                // 31 m, so this only has to break ties inside a size class.
+                var height = island.w * (0.92f + 0.16f * Jitter((int)seed, 0x2545F491u));
                 var width = height * (0.85f + 0.3f * Jitter((int)seed, 0x9E3779B1u));
                 var yaw = Jitter((int)seed, 0x85EBCA6Bu) * 360f;
                 var lean = new Vector3(

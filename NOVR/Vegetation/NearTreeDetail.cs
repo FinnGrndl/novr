@@ -163,15 +163,23 @@ internal sealed class NearTreeDetail : MonoBehaviour
         var trees = 0;
         var hidden = 0;
         var ms = 0f;
+        var nearest = float.MaxValue;
+        var global = Vector3.zero;
         foreach (var field in _active)
         {
             trees += field.TreesDrawn;
             hidden += field.ClumpsHidden;
             ms = Mathf.Max(ms, field.LastRebuildMs);
+            nearest = Mathf.Min(nearest, field.NearestDistance);
+            global = field.CameraGlobal;
         }
 
+        // The camera's global position and the nearest clump are here so that an
+        // empty set is diagnosable from the log alone: over water, over a runway,
+        // or a coordinate conversion that is wrong all look identical otherwise.
         Debug.Log($"[NOVR.NearTrees] {trees} trees drawn, {hidden} clumps hidden from the game, "
-                  + $"last rebuild {ms:F2} ms.");
+                  + $"last rebuild {ms:F2} ms; camera global "
+                  + $"({global.x:F0}, {global.y:F0}, {global.z:F0}), nearest clump {nearest:F0} m.");
     }
 
     private void OnDestroy()
