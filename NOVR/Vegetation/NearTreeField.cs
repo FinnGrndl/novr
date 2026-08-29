@@ -95,6 +95,7 @@ internal sealed class NearTreeField
     // each, so the detail-radius split is a binary search rather than a rebuild.
     private readonly Matrix4x4[][] _matrices = new Matrix4x4[NearTreeModel.FullVariants][];
     private readonly float[][] _matrixDist = new float[NearTreeModel.FullVariants][];
+    private readonly int[][] _matrixId = new int[NearTreeModel.FullVariants][];
     private readonly int[] _matrixCount = new int[NearTreeModel.FullVariants];
 
     private Vector3 _lastOrigin = new Vector3(float.NaN, 0f, 0f);
@@ -150,6 +151,7 @@ internal sealed class NearTreeField
         {
             _matrices[v] = new Matrix4x4[1024];
             _matrixDist[v] = new float[1024];
+            _matrixId[v] = new int[1024];
         }
     }
 
@@ -431,13 +433,24 @@ internal sealed class NearTreeField
         }
     }
 
+    /// <summary>
+    /// Rebuilds the per-instance matrices, ordered near-to-far inside each model
+    /// variant so the detail split downstream is a binary search.
+    ///
+    /// <para>Two passes, and the reason is measured. Sorting the matrices
+    /// directly means an <c>Array.Sort</c> that swaps 64-byte structs, and at
+    /// the default radius this method ran in 1.19 ms — every frame while moving,
+    /// because a clump entering or leaving marks the set dirty. Sorting a float
+    /// key against an int index moves four bytes instead of sixty-four, and the
+    /// transform is then built once, in order.</para>
+    /// </summary>
     private void BuildMatrices(Vector3 cameraGlobal, Vector3 origin)
     {
         for (var v = 0; v < NearTreeModel.FullVariants; v++) _matrixCount[v] = 0;
 
-        var detail = NearTreeConfig.DetailRadius;
-        var drawn = 0;
-
+        // Pass one: distance and variant only. The packed id is the clump's slot
+        // in the near list times 64 plus the tree's index in the clump, which
+        // fits because a clump holds 36.
         for (var c = 0; c < _nearCount; c++)
         {
             var clumpId = _nearIds[c];
@@ -450,13 +463,38 @@ internal sealed class NearTreeField
                 var seed = (uint)clumpId * 0x9E3779B9u + (uint)t;
                 var variant = (int)(seed >> 28) % NearTreeModel.FullVariants;
 
-                var bucket = _matrices[variant];
-                if (_matrixCount[variant] == bucket.Length)
+                var count = _matrixCount[variant];
+                if (count == _matrices[variant].Length)
                 {
-                    Array.Resize(ref _matrices[variant], bucket.Length * 2);
-                    Array.Resize(ref _matrixDist[variant], bucket.Length * 2);
-                    bucket = _matrices[variant];
+                    Array.Resize(ref _matrices[variant], count * 2);
+                    Array.Resize(ref _matrixDist[variant], count * 2);
+                    Array.Resize(ref _matrixId[variant], count * 2);
                 }
+
+                // The detail split runs on a frayed distance so the change of
+                // model does not happen on a circle centred on the pilot either.
+                _matrixDist[variant][count] =
+                    (global - cameraGlobal).magnitude * (0.88f + 0.24f * Jitter((int)seed, 0x165667B1u));
+                _matrixId[variant][count] = c * 64 + t;
+                _matrixCount[variant] = count + 1;
+            }
+        }
+
+        var drawn = 0;
+        for (var v = 0; v < NearTreeModel.FullVariants; v++)
+        {
+            var count = _matrixCount[v];
+            Array.Sort(_matrixDist[v], _matrixId[v], 0, count);
+
+            var matrices = _matrices[v];
+            var ids = _matrixId[v];
+            for (var i = 0; i < count; i++)
+            {
+                var clumpId = _nearIds[ids[i] >> 6];
+                var t = ids[i] & 63;
+                var island = _islands[t];
+                var global = _clumps[clumpId] + new Vector3(island.x, island.y, island.z);
+                var seed = (uint)clumpId * 0x9E3779B9u + (uint)t;
 
                 // The clump already carries six distinct sizes between 15 m and
                 // 31 m, so this only has to break ties inside a size class.
@@ -468,28 +506,18 @@ internal sealed class NearTreeField
                     0f,
                     (Jitter((int)seed, 0x27D4EB2Fu) - 0.5f) * 8f);
 
-                bucket[_matrixCount[variant]] = Matrix4x4.TRS(
+                matrices[i] = Matrix4x4.TRS(
                     global + origin,
                     Quaternion.Euler(lean.x, yaw, lean.z),
                     new Vector3(width, height, width));
-
-                // The detail split is done on a frayed distance so the change of
-                // model does not happen on a visible circle either.
-                _matrixDist[variant][_matrixCount[variant]] =
-                    (global - cameraGlobal).magnitude * (0.88f + 0.24f * Jitter((int)seed, 0x165667B1u));
-                _matrixCount[variant]++;
-                drawn++;
             }
-        }
 
-        for (var v = 0; v < NearTreeModel.FullVariants; v++)
-        {
-            Array.Sort(_matrixDist[v], _matrices[v], 0, _matrixCount[v]);
+            drawn += count;
         }
 
         TreesDrawn = drawn;
         _detailSplitValid = false;
-        _detailRadiusUsed = detail;
+        _detailRadiusUsed = NearTreeConfig.DetailRadius;
     }
 
     private bool _detailSplitValid;
