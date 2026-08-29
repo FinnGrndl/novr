@@ -81,8 +81,11 @@ public static class NearTreeConfig
                 "How far out, in metres, the mod's trees replace the game's. 300 m is about 105 clumps "
                 + "(3,800 trees) on the shipped maps, which is the distance at which a flat card still reads "
                 + "as flat. Raising it costs geometry quadratically — 600 m is roughly 3.4x the trees — and "
-                + "buys progressively less, because past a few hundred metres a tree is a few pixels wide.",
-                new AcceptableValueRange<float>(50f, 800f)));
+                + "buys progressively less, because past a few hundred metres a tree is a few pixels wide. "
+                + "The top of the range is there for looking at the result rather than for flying with it: "
+                + "from a cockpit at altitude everything close is below the coaming, so a wide radius is how "
+                + "you get the mod's trees into a screenshot at all.",
+                new AcceptableValueRange<float>(50f, 2000f)));
 
         NearTreeDetailRadius = config.Bind(
             Section,
