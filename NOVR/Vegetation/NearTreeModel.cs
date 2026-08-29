@@ -130,6 +130,20 @@ internal static class NearTreeModel
                 cards: 5, size: 0.52f);
         }
 
+        // Normalise to exactly unit height. The canopy cards stand off the
+        // ellipsoid by half their own size, so the tallest geometry ends up
+        // about 15 % above the nominal top — which showed up in a capture as the
+        // mod's treeline standing taller than the game's beside it. Measuring
+        // the mesh and dividing is exact, and it survives any later change to
+        // the crown proportions.
+        var top = 0f;
+        foreach (var v in verts) top = Mathf.Max(top, v.y);
+        if (top > 0.001f)
+        {
+            var scale = 1f / top;
+            for (var i = 0; i < verts.Count; i++) verts[i] *= scale;
+        }
+
         var mesh = new Mesh { name = full ? $"NOVR_NearTree_{variant}" : "NOVR_NearTree_Reduced" };
         mesh.SetVertices(verts);
         mesh.SetNormals(norms);
