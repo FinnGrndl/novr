@@ -175,7 +175,7 @@ public class NativeSinglePlayerMissionPanel : MonoBehaviour
         try
         {
             MissionGroup.Init();
-            var entries = MissionSaveLoad
+            var entries = MissionQuickLoadHelper
                 .QuickLoadMany(MissionGroup.All.GetMissions())
                 .Where(entry => HasTag(entry.mission, MissionTag.SinglePlayer))
                 .Select(entry => new MissionEntry(entry.key, entry.mission));

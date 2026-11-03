@@ -698,7 +698,7 @@ public class NativeVrUiRoot : NOVRBehaviour
     {
         if (_mainCanvas == null) return false;
 
-        var pickers = _mainCanvas.GetComponentsInChildren<global::MissionsPicker>(true);
+        var pickers = _mainCanvas.GetComponentsInChildren<global::MissionPicker>(true);
         for (var index = 0; index < pickers.Length; index++)
         {
             if (pickers[index].gameObject.activeInHierarchy)

@@ -1214,7 +1214,7 @@ public class AutoStartMission : MonoBehaviour
         try
         {
             MissionGroup.Init();
-            var missions = MissionSaveLoad
+            var missions = MissionQuickLoadHelper
                 .QuickLoadMany(MissionGroup.All.GetMissions())
                 .Where(entry => HasSinglePlayerTag(entry.mission))
                 .ToList();

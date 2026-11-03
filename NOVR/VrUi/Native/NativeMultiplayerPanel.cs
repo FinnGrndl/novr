@@ -709,7 +709,7 @@ public class NativeMultiplayerPanel : MonoBehaviour
         try
         {
             MissionGroup.Init();
-            var entries = MissionSaveLoad.QuickLoadMany(MissionGroup.All.GetMissions());
+            var entries = MissionQuickLoadHelper.QuickLoadMany(MissionGroup.All.GetMissions());
             foreach (var entry in entries)
             {
                 if (!HasTag(entry.mission, MissionTag.Multiplayer)) continue;
