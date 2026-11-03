@@ -50,3 +50,109 @@ internal static class DetailRendererVrCameraFix
             $"[NOVR.TreeFix] Bound DetailRenderer GPU detail culling to camera '{trackedCamera.gameObject.name}'.");
     }
 }
+
+/// <summary>
+/// The GPU grass/tree culling planes come from <c>GeometryUtility.CalculateFrustumPlanes(camera)</c>,
+/// which under XR is the mono desktop-FOV frustum, so detail only survives in a narrow cone in the
+/// middle of the headset view. Replace them with the union of both eye frustums plus a margin
+/// for head motion between LateUpdate and rendering.
+/// </summary>
+[HarmonyPatch(typeof(ShaderGlobalManager), nameof(ShaderGlobalManager.SetCameraPlanes))]
+internal static class DetailCullingStereoFrustumPatch
+{
+    // Extra angle added on every side of the combined eye frustum.
+    private const float MarginDegrees = 10f;
+    private const float MaxHalfAngleDegrees = 85f;
+
+    private static readonly Plane[] Planes = new Plane[6];
+    private static readonly Vector4[] PlaneVectors = new Vector4[6];
+    private static bool _loggedActive;
+
+    [HarmonyPostfix]
+    private static void Postfix(Camera camera)
+    {
+        if (camera == null || !camera.stereoEnabled)
+        {
+            return;
+        }
+
+        var cameraView = Matrix4x4.Scale(new Vector3(1f, 1f, -1f)) * camera.transform.worldToLocalMatrix;
+        float left = float.MaxValue, right = float.MinValue, bottom = float.MaxValue, top = float.MinValue;
+        if (!AccumulateEye(camera, Camera.StereoscopicEye.Left, cameraView, ref left, ref right, ref bottom, ref top) ||
+            !AccumulateEye(camera, Camera.StereoscopicEye.Right, cameraView, ref left, ref right, ref bottom, ref top))
+        {
+            return;
+        }
+
+        left = -WidenTangent(-left);
+        right = WidenTangent(right);
+        bottom = -WidenTangent(-bottom);
+        top = WidenTangent(top);
+
+        var near = camera.nearClipPlane;
+        var far = camera.farClipPlane;
+        var projection = Matrix4x4.Frustum(left * near, right * near, bottom * near, top * near, near, far);
+        GeometryUtility.CalculateFrustumPlanes(projection * cameraView, Planes);
+        for (var i = 0; i < 6; i++)
+        {
+            var normal = Planes[i].normal;
+            PlaneVectors[i] = new Vector4(normal.x, normal.y, normal.z, Planes[i].distance);
+        }
+
+        Shader.SetGlobalVectorArray(ShaderGlobalManager.ID_Global_FrustumPlanes, PlaneVectors);
+
+        if (!_loggedActive)
+        {
+            _loggedActive = true;
+            Debug.Log(
+                $"[NOVR.TreeFix] Detail culling uses the stereo frustum: horizontal " +
+                $"{Mathf.Atan(-left) * Mathf.Rad2Deg:F0}/{Mathf.Atan(right) * Mathf.Rad2Deg:F0} deg, vertical " +
+                $"{Mathf.Atan(-bottom) * Mathf.Rad2Deg:F0}/{Mathf.Atan(top) * Mathf.Rad2Deg:F0} deg " +
+                $"(desktop FOV {camera.fieldOfView:F0} deg).");
+        }
+    }
+
+    // Projects the eye's far-plane corners into the centre camera's view space and grows the
+    // tangent bounds to cover them. Handles asymmetric and canted eye projections.
+    private static bool AccumulateEye(
+        Camera camera,
+        Camera.StereoscopicEye eye,
+        Matrix4x4 cameraView,
+        ref float left,
+        ref float right,
+        ref float bottom,
+        ref float top)
+    {
+        var eyeViewProjection = camera.GetStereoProjectionMatrix(eye) * camera.GetStereoViewMatrix(eye);
+        if (Mathf.Approximately(eyeViewProjection.determinant, 0f))
+        {
+            return false;
+        }
+
+        var clipToCameraView = cameraView * eyeViewProjection.inverse;
+        for (var corner = 0; corner < 4; corner++)
+        {
+            var ndc = new Vector3((corner & 1) == 0 ? -1f : 1f, (corner & 2) == 0 ? -1f : 1f, 1f);
+            var point = clipToCameraView.MultiplyPoint(ndc);
+            if (point.z >= 0f)
+            {
+                return false;
+            }
+
+            var tanX = point.x / -point.z;
+            var tanY = point.y / -point.z;
+            left = Mathf.Min(left, tanX);
+            right = Mathf.Max(right, tanX);
+            bottom = Mathf.Min(bottom, tanY);
+            top = Mathf.Max(top, tanY);
+        }
+
+        return true;
+    }
+
+    private static float WidenTangent(float tangent)
+    {
+        var angle = Mathf.Atan(tangent) * Mathf.Rad2Deg + MarginDegrees;
+        return Mathf.Tan(Mathf.Min(angle, MaxHalfAngleDegrees) * Mathf.Deg2Rad);
+    }
+}
