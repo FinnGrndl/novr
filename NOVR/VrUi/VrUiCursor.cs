@@ -309,6 +309,7 @@ public class VrUiCursor: NOVRBehaviour
         var leftPressed = realMouse.leftButton.isPressed || _controllerTriggerPressed;
         var leftClicked = realMouse.leftButton.wasPressedThisFrame || _controllerTriggerClicked;
         UpdateCursorAnimation(leftPressed, leftClicked);
+        Capture.ImguiCapture.UpdateVrClick(_controllerTriggerPressed);
 
         var screenPoint = GetScreenPoint();
 

@@ -49,6 +49,7 @@ public class MenuCaptureBackend : NOVRBehaviour
     private RenderTexture? _target;
     private Canvas? _panelCanvas;
     private RawImage? _panelImage;
+    private RawImage? _imguiImage;
     private RectTransform? _panelRect;
     private Vector3 _anchorPosition;
     private Quaternion _anchorRotation = Quaternion.identity;
@@ -123,6 +124,12 @@ public class MenuCaptureBackend : NOVRBehaviour
         if (ControlMapperUp())
         {
             _reason = wantCapture ? "the menu canvas and the keybinding screen" : "the keybinding screen";
+            wantCapture = true;
+        }
+
+        if (ImguiCapture.WindowOpen)
+        {
+            _reason = wantCapture ? $"{_reason} and the F1 settings window" : "the F1 settings window";
             wantCapture = true;
         }
 
@@ -310,6 +317,7 @@ public class MenuCaptureBackend : NOVRBehaviour
             Destroy(_panelCanvas.gameObject);
             _panelCanvas = null;
             _panelImage = null;
+            _imguiImage = null;
             _panelRect = null;
         }
 
@@ -417,6 +425,21 @@ public class MenuCaptureBackend : NOVRBehaviour
 
         LayerHelper.SetLayerRecursive(go.transform, LayerHelper.GetVrUiLayer());
 
+        // IMGUI (the F1 settings window) is drawn after every camera has
+        // rendered, into its own texture, so it sits on top of the menu
+        // capture as a second layer rather than inside it.
+        var imguiGo = new GameObject("IMGUI Texture");
+        imguiGo.transform.SetParent(rect, false);
+        var imgui = imguiGo.AddComponent<RawImage>();
+        imgui.raycastTarget = false;
+        imgui.enabled = false;
+        var imguiRect = (RectTransform)imguiGo.transform;
+        imguiRect.anchorMin = Vector2.zero;
+        imguiRect.anchorMax = Vector2.one;
+        imguiRect.offsetMin = Vector2.zero;
+        imguiRect.offsetMax = Vector2.zero;
+        _imguiImage = imgui;
+
         _panelCanvas = canvas;
         _panelImage = image;
         _panelRect = rect;
@@ -446,6 +469,13 @@ public class MenuCaptureBackend : NOVRBehaviour
         EnsurePanel();
 
         if (_panelImage != null && _panelImage.texture != _target) _panelImage.texture = _target;
+        if (_imguiImage != null)
+        {
+            var imguiTexture = ImguiCapture.Texture;
+            _imguiImage.texture = imguiTexture;
+            _imguiImage.enabled = imguiTexture != null;
+            _imguiImage.uvRect = ImguiCapture.FlipVertical ? new Rect(0f, 1f, 1f, -1f) : new Rect(0f, 0f, 1f, 1f);
+        }
         ApplyPanelSize();
         ApplyAnchor();
     }
