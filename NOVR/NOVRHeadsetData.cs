@@ -22,6 +22,14 @@ public class NOVRHeadsetData : NOVRBehaviour
     public static Vector3 TranslationError => Translation - TranslationCalibrationOffset - TranslationAnchor;
 
     public static Quaternion Rotation { get; private set; }
+
+    /// <summary>
+    /// Extra yaw in degrees applied on top of the tracked head rotation. Used
+    /// only by the unattended harness to look around ([Debug] Auto Dump Yaws,
+    /// see <see cref="HarnessViewPose"/>); zero in every normal session.
+    /// </summary>
+    public static float HarnessYawOffset { get; set; }
+
     public static Quaternion RotationCalibrationOffset { get; private set; } = Quaternion.identity;
     public static Quaternion RotationError => Quaternion.Inverse(RotationCalibrationOffset) * Rotation;
     
@@ -41,7 +49,8 @@ public class NOVRHeadsetData : NOVRBehaviour
             (calibrationAxes & CalibrationAxes.X) != 0 ? currentError.x : ov ? TranslationCalibrationOffset.x : 0,
             (calibrationAxes & CalibrationAxes.Y) != 0 ? currentError.y : ov ? TranslationCalibrationOffset.y : 0,
             (calibrationAxes & CalibrationAxes.Z) != 0 ? currentError.z : ov ? TranslationCalibrationOffset.z : 0
-        );
+        ) + Vector3.forward * ModConfiguration.Instance.CockpitHeadForwardOffset.Value
+          + Vector3.right * ModConfiguration.Instance.CockpitHeadRightOffset.Value;
     }
 
 
@@ -130,6 +139,14 @@ public class NOVRHeadsetData : NOVRBehaviour
         {
             Translation = TranslationAnchor + TranslationCalibrationOffset + (Vector3)_trackingPositionMethod.Invoke(null, TrackingMethodArgs);
             Rotation = RotationCalibrationOffset * (Quaternion)_trackingRotationMethod.Invoke(null, TrackingMethodArgs);
+
+            // Outermost, so the harness yaw is a turn in the cockpit's frame
+            // rather than a twist in the head's own — the same thing the pilot
+            // does when they look out of the left side of the canopy.
+            if (HarnessYawOffset != 0f)
+            {
+                Rotation = Quaternion.Euler(0f, HarnessYawOffset, 0f) * Rotation;
+            }
         }
     }
 }

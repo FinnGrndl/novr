@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using NuclearOption.Networking.Lobbies;
 using NuclearOption.Workshop;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace NOVR.VrUi.Native;
@@ -18,6 +17,7 @@ public class NativeVrUiRoot : NOVRBehaviour
     private const float MainMenuScanIntervalSeconds = 0.5f;
     private const float RequestedMenuTransitionSeconds = 0.5f;
     private const float RecenterDelaySeconds = 2.0f;
+    private const float LiveRecenterDelaySeconds = 3.0f;
     private const float AnchorResetAfterHiddenSeconds = 1.5f;
     private const float MinimumMenuCenterHeightBelowHeadMeters = -0.25f;
     private const float RecenterWidgetDistanceMeters = 1.35f;
@@ -59,6 +59,8 @@ public class NativeVrUiRoot : NOVRBehaviour
     private float _pendingRecenterTime;
     private bool _recenterPending;
     private bool _menuAnchorInitialized;
+    private float _pendingLiveRecenterTime;
+    private bool _liveRecenterPending;
     private float _lastNativeUiVisibleTime = -100f;
     private Vector3 _menuAnchorPosition;
     private Quaternion _menuAnchorRotation = Quaternion.identity;
@@ -91,6 +93,12 @@ public class NativeVrUiRoot : NOVRBehaviour
             SetUtilityWidgetMode(ShouldShowStockNativeUiToggle()
                 ? UtilityWidgetMode.EnableNativeUi
                 : UtilityWidgetMode.Hidden);
+            // Recentering is not a menu feature, so it has to survive the early
+            // return that turns the native menu UI off. Upstream guards the
+            // equivalent block on GameManager.gameState; on this line the guard
+            // is the config toggle, so the shortcut is wired in here instead.
+            HandleRecenterShortcut(false);
+            UpdateLivePendingRecenter();
             return;
         }
 
@@ -162,6 +170,7 @@ public class NativeVrUiRoot : NOVRBehaviour
         HandleRecenterShortcut(shouldShowNativeUi);
         UpdatePlacement(shouldShowNativeUi);
         UpdatePendingRecenter(shouldShowNativeUi);
+        UpdateLivePendingRecenter();
         if (_root != null && _root.activeSelf != shouldShowNativeUi)
         {
             _root.SetActive(shouldShowNativeUi);
@@ -277,6 +286,8 @@ public class NativeVrUiRoot : NOVRBehaviour
         ApplyNativeCursorProjectionReference();
     }
 
+    private const int GazeAnchorPriority = 2;
+
     private void CaptureMenuAnchor()
     {
         var reference = APIBus.CockpitHudReference.transform;
@@ -312,6 +323,10 @@ public class NativeVrUiRoot : NOVRBehaviour
 
         _root.transform.position = position;
         _root.transform.rotation = _menuAnchorRotation;
+
+        // Head-gaze amplification measures from the centre of whatever the
+        // cursor is pointed at; the native panel is that surface while it is up.
+        VrUiCursor.I?.SetGazeAnchorCenter(position, GazeAnchorPriority);
     }
 
     private void ApplyNativeCursorProjectionReference()
@@ -328,13 +343,34 @@ public class NativeVrUiRoot : NOVRBehaviour
 
     private void HandleRecenterShortcut(bool shouldShowNativeUi)
     {
-        if (!shouldShowNativeUi) return;
+        if (!UnityEngine.Input.GetKeyDown(ModConfiguration.Instance.RecenterShortcut.Value)) return;
 
-        var keyboard = Keyboard.current;
-        if (keyboard?.homeKey.wasPressedThisFrame == true)
+        if (shouldShowNativeUi)
         {
             RecenterMenu();
         }
+        else
+        {
+            QueueLiveRecenter();
+        }
+    }
+
+    private void QueueLiveRecenter()
+    {
+        _liveRecenterPending = true;
+        _pendingLiveRecenterTime = Time.unscaledTime + LiveRecenterDelaySeconds;
+        Debug.Log($"[NOVR] Live recenter queued for {LiveRecenterDelaySeconds:0.0} seconds from now.");
+    }
+
+    private void UpdateLivePendingRecenter()
+    {
+        if (!_liveRecenterPending) return;
+        if (Time.unscaledTime < _pendingLiveRecenterTime) return;
+
+        NOVRHeadsetData.CalibrateTranslation();
+        NOVRHeadsetData.CalibrateRotation();
+        _liveRecenterPending = false;
+        Debug.Log("[NOVR] Live recenter applied.");
     }
 
     private void RecenterMenu()
@@ -353,6 +389,7 @@ public class NativeVrUiRoot : NOVRBehaviour
         NOVRHeadsetData.CalibrateRotation();
         _recenterPending = false;
         UpdateRecenterButtonText();
+        UpdateRecenterWidgetPlacement();
         Debug.Log("[NOVR] Native VR UI recentered.");
     }
 
@@ -438,10 +475,24 @@ public class NativeVrUiRoot : NOVRBehaviour
     {
         if (_recenterWidgetRoot == null) return;
 
+        // Anchor the widget in world space instead of parenting it to the
+        // head: once placed it stays put, so the head-gaze cursor (always at
+        // the center of the view) can be aimed at it. Re-placed on recenter.
+        if (_recenterWidgetRoot.transform.parent != null)
+        {
+            _recenterWidgetRoot.transform.SetParent(null, true);
+        }
+
         var reference = APIBus.CockpitHudReference.transform;
-        _recenterWidgetRoot.transform.SetParent(reference, false);
-        _recenterWidgetRoot.transform.localPosition = new Vector3(0f, RecenterWidgetVerticalOffsetMeters, RecenterWidgetDistanceMeters);
-        _recenterWidgetRoot.transform.localRotation = Quaternion.identity;
+        var forward = Vector3.ProjectOnPlane(reference.forward, Vector3.up);
+        if (forward.sqrMagnitude < 0.0001f)
+        {
+            forward = Vector3.forward;
+        }
+
+        _recenterWidgetRoot.transform.position = reference.position +
+            reference.rotation * new Vector3(0f, RecenterWidgetVerticalOffsetMeters, RecenterWidgetDistanceMeters);
+        _recenterWidgetRoot.transform.rotation = Quaternion.LookRotation(forward.normalized, Vector3.up);
         _recenterWidgetRoot.transform.localScale = Vector3.one * RecenterWidgetCanvasScale;
 
         if (_recenterWidgetCanvas != null)
@@ -465,16 +516,21 @@ public class NativeVrUiRoot : NOVRBehaviour
 
         if (!visible) return;
 
-        UpdateRecenterWidgetPlacement();
         UpdateRecenterButtonText();
 
-        if (modeChanged && _recenterWidgetButton != null)
-        {
-            var color = mode == UtilityWidgetMode.EnableNativeUi
-                ? new Color(0.12f, 0.34f, 0.20f, 0.96f)
-                : new Color(0.18f, 0.23f, 0.26f, 0.96f);
-            NativeButtonFeedback.SetNormalColor(_recenterWidgetButton, color);
-        }
+        if (!modeChanged) return;
+
+        // Place the widget once, in world space, when it first becomes visible
+        // (or its mode changes). A head-locked widget can never be hit by the
+        // head-gaze cursor, which sits at the center of the view — the user
+        // would have to chase it with their head. Fixed in space, the user can
+        // simply look at it to aim the gaze cursor at it.
+        UpdateRecenterWidgetPlacement();
+
+        var color = mode == UtilityWidgetMode.EnableNativeUi
+            ? new Color(0.12f, 0.34f, 0.20f, 0.96f)
+            : new Color(0.18f, 0.23f, 0.26f, 0.96f);
+        NativeButtonFeedback.SetNormalColor(_recenterWidgetButton, color);
     }
 
     private void OnUtilityWidgetClicked()
@@ -531,6 +587,17 @@ public class NativeVrUiRoot : NOVRBehaviour
 
     private bool ShouldShowStockNativeUiToggle()
     {
+        // The button is the only in-headset way back to the native VR UI, and
+        // it was shown by default while the alternative to the native UI was
+        // the game's own flat menus. It no longer is: MenuCaptureBackend is
+        // simply !EnableNativeMenuUi, so with the native UI off the menus are
+        // on a VR panel already and this gate — MainCanvas active, which the
+        // capture *requires* — fires over every captured menu. Default off.
+        if (!ModConfiguration.Instance.ShowNativeUiButton.Value)
+        {
+            return false;
+        }
+
         if (_mainCanvas == null || !_mainCanvas.activeInHierarchy || IsControlMapperOpen())
         {
             return false;
@@ -631,7 +698,7 @@ public class NativeVrUiRoot : NOVRBehaviour
     {
         if (_mainCanvas == null) return false;
 
-        var pickers = _mainCanvas.GetComponentsInChildren<global::MissionsPicker>(true);
+        var pickers = _mainCanvas.GetComponentsInChildren<global::MissionPicker>(true);
         for (var index = 0; index < pickers.Length; index++)
         {
             if (pickers[index].gameObject.activeInHierarchy)

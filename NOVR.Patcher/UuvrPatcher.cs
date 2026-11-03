@@ -268,6 +268,21 @@ public class Patcher
         }
     }
 
+    private static bool FilesAreIdentical(FileInfo source, string targetFilePath)
+    {
+        var target = new FileInfo(targetFilePath);
+        if (!target.Exists || target.Length != source.Length) return false;
+
+        try
+        {
+            return File.ReadAllBytes(source.FullName).SequenceEqual(File.ReadAllBytes(targetFilePath));
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
     private static void CopyDirectory(string sourceDir, string destinationDir)
     {
         DirectoryInfo dir = new(sourceDir);
@@ -282,7 +297,19 @@ public class Patcher
         foreach (var file in dir.GetFiles())
         {
             var targetFilePath = Path.Combine(destinationDir, file.Name);
-            file.CopyTo(targetFilePath, true);
+            if (FilesAreIdentical(file, targetFilePath)) continue;
+
+            // The game can already hold some of these open (Unity.XR.Management.dll is loaded
+            // before preloader patchers run). One locked file must not abort the whole copy and
+            // leave every file after it stale.
+            try
+            {
+                file.CopyTo(targetFilePath, true);
+            }
+            catch (IOException exception)
+            {
+                Console.WriteLine($"Could not replace `{targetFilePath}` (in use?), keeping the existing file: {exception.Message}");
+            }
         }
 
         foreach (var subDir in dirs)

@@ -1,5 +1,6 @@
 using System;
 using NOVR.VrCamera;
+using NOVR.VrUi.Capture;
 using NOVR.VrUi.Native;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
@@ -45,6 +46,13 @@ public class NOUIManager : NOVRBehaviour
         Create<UIBehaviorPatcher>(transform);
         UIBehaviorPatcher.DoPatching();
         Create<VrUiCursor>(transform);
+        Create<MenuCaptureBackend>(transform);
+        Create<ImguiCaptureBegin>(transform);
+        Create<ImguiCaptureEnd>(transform);
+        Create<FlightHudCaptureBackend>(transform);
+        Create<HmdVisorBackend>(transform);
+        Create<ViewLayerBackend>(transform);
+        Create<Components.GazeDesignatorDriver>(transform);
         Create<NativeVrUiRoot>(transform);
         ConfigureUiCameras();
     }

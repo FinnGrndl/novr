@@ -189,7 +189,7 @@ public class NativeGameActionAdapter
             return false;
         }
 
-        var pickers = _originalMainCanvas.GetComponentsInChildren<global::MissionsPicker>(true);
+        var pickers = _originalMainCanvas.GetComponentsInChildren<global::MissionPicker>(true);
         for (var index = 0; index < pickers.Length; index++)
         {
             var picker = pickers[index];

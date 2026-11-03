@@ -29,6 +29,11 @@ internal static class HUDUnitMarkerViewPositionPatch
     [HarmonyPatch(typeof(global::HUDUnitMarker), nameof(global::HUDUnitMarker.UpdatePosition))]
     private static class UpdatePositionPatch
     {
+        //: Gated so the game's own HUD code path is genuinely untouched when
+        //: the Vanilla Flight HUD diagnostic is on — see VanillaFlightHud.
+        [HarmonyPrepare]
+        private static bool Prepare() => VanillaFlightHud.ModdedHudActive;
+
         [HarmonyPrefix]
         private static bool Prefix(global::HUDUnitMarker __instance, FactionHQ hq, global::GlobalPosition viewPosition, Vector3 cameraForward)
         {
@@ -96,8 +101,17 @@ internal static class HUDUnitMarkerViewPositionPatch
             }
             else
             {
-                if (!__instance.image.enabled)
-                    __instance.image.enabled = true;
+                // HUDUnitMarker.UpdateMaximized assigns image.sprite = null for a
+                // minimized friendly or neutral unit (a hostile one gets
+                // CombatHUD.minimizedHostile instead). A Unity Image with a null
+                // sprite does not draw nothing — Graphic.OnPopulateMesh fills its
+                // whole rect with image.color, so the marker becomes a solid
+                // faction-coloured box sitting over the unit. On the flat HUD that
+                // quad is a few pixels; on the cockpit HUD in VR it is a slab.
+                // Draw the marker only when it actually has art.
+                var hasSprite = __instance.image.sprite != null;
+                if (__instance.image.enabled != hasSprite)
+                    __instance.image.enabled = hasSprite;
                 if (VrHudProjection.TryProjectToCockpitHud(knownWorldPosition, out var targetHudPosition))
                     markerTransform.position = targetHudPosition;
 
