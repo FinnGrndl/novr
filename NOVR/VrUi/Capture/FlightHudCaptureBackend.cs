@@ -278,7 +278,7 @@ public class FlightHudCaptureBackend : NOVRBehaviour
             Destroy(_target);
         }
 
-        _target = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32)
+        _target = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32)
         {
             name = "NOVR Flight HUD Capture",
             filterMode = mipped ? FilterMode.Trilinear : FilterMode.Bilinear,

@@ -265,7 +265,7 @@ public class HmdVisorBackend : NOVRBehaviour
     /// </summary>
     private RenderTexture CreateCaptureTarget(string name)
     {
-        var target = new RenderTexture(_targetWidth, _targetHeight, 0, RenderTextureFormat.ARGB32)
+        var target = new RenderTexture(_targetWidth, _targetHeight, 24, RenderTextureFormat.ARGB32)
         {
             name = name,
             filterMode = FilterMode.Bilinear,

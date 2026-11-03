@@ -112,8 +112,10 @@ internal static class DetailCullingStereoFrustumPatch
         }
     }
 
-    // Projects the eye's far-plane corners into the centre camera's view space and grows the
-    // tangent bounds to cover them. Handles asymmetric and canted eye projections.
+    // Rotates the eye's frustum edge directions into the centre camera's view space and grows the
+    // tangent bounds to cover them. Handles asymmetric and canted eye projections. Works on
+    // directions read straight off the projection matrix: inverting the full view-projection
+    // loses all precision with the game's far plane.
     private static bool AccumulateEye(
         Camera camera,
         Camera.StereoscopicEye eye,
@@ -123,17 +125,25 @@ internal static class DetailCullingStereoFrustumPatch
         ref float bottom,
         ref float top)
     {
-        var eyeViewProjection = camera.GetStereoProjectionMatrix(eye) * camera.GetStereoViewMatrix(eye);
-        if (Mathf.Approximately(eyeViewProjection.determinant, 0f))
+        var projection = camera.GetStereoProjectionMatrix(eye);
+        if (Mathf.Approximately(projection.m00, 0f) || Mathf.Approximately(projection.m11, 0f))
         {
             return false;
         }
 
-        var clipToCameraView = cameraView * eyeViewProjection.inverse;
+        var eyeLeft = (projection.m02 - 1f) / projection.m00;
+        var eyeRight = (projection.m02 + 1f) / projection.m00;
+        var eyeBottom = (projection.m12 - 1f) / projection.m11;
+        var eyeTop = (projection.m12 + 1f) / projection.m11;
+
+        var eyeToCameraView = cameraView * camera.GetStereoViewMatrix(eye).inverse;
         for (var corner = 0; corner < 4; corner++)
         {
-            var ndc = new Vector3((corner & 1) == 0 ? -1f : 1f, (corner & 2) == 0 ? -1f : 1f, 1f);
-            var point = clipToCameraView.MultiplyPoint(ndc);
+            var eyeDirection = new Vector3(
+                (corner & 1) == 0 ? eyeLeft : eyeRight,
+                (corner & 2) == 0 ? eyeBottom : eyeTop,
+                -1f);
+            var point = eyeToCameraView.MultiplyVector(eyeDirection);
             if (point.z >= 0f)
             {
                 return false;

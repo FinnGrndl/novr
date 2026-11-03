@@ -208,7 +208,7 @@ public class ViewLayerBackend : NOVRBehaviour
 
     private void Setup(CombatHUD combatHud)
     {
-        _target = new RenderTexture(TexWidth, TexHeight, 0, RenderTextureFormat.ARGB32)
+        _target = new RenderTexture(TexWidth, TexHeight, 24, RenderTextureFormat.ARGB32)
         {
             name = "NOVR View Layer Capture",
             filterMode = FilterMode.Bilinear,

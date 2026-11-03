@@ -343,7 +343,7 @@ public class MenuCaptureBackend : NOVRBehaviour
 
         // Matching the game's own resolution keeps the canvas layout identical
         // to the flat one and the text as crisp as the source.
-        _target = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32)
+        _target = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32)
         {
             name = "NOVR Menu Capture",
             filterMode = FilterMode.Bilinear,
