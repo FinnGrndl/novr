@@ -1043,8 +1043,19 @@ public class VrUiCursor: NOVRBehaviour
     /// <para><paramref name="unknown"/> is the answer when Rewired cannot be
     /// read, and it differs by question: the map's stick is given back on a
     /// guess, the aircraft's is not taken away on one.</para>
+    ///
+    /// <para><paramref name="ignoreKeyboard"/> leaves keys out of the comparison.
+    /// A shared key is not a shared stick, and withholding the flight axes is
+    /// all-or-nothing: on a HOTAS whose free camera shares only WASD with the
+    /// aircraft, it would take the real stick away for the whole time the map
+    /// is open.</para>
     /// </summary>
-    private static bool SharesStick(Rewired.Player player, StickAxisPair pair, StickAxisPair other, bool unknown)
+    private static bool SharesStick(
+        Rewired.Player player,
+        StickAxisPair pair,
+        StickAxisPair other,
+        bool unknown,
+        bool ignoreKeyboard = false)
     {
         if (pair.XAction == other.XAction && pair.YAction == other.YAction) return true;
 
@@ -1055,6 +1066,7 @@ public class VrUiCursor: NOVRBehaviour
             foreach (var map in player.controllers.maps.ElementMapsWithAction(action, true))
             {
                 if (map == null) continue;
+                if (ignoreKeyboard && map.controllerMap.controllerType == Rewired.ControllerType.Keyboard) continue;
                 otherElements.Add(ElementKey(map));
             }
 
@@ -1101,7 +1113,7 @@ public class VrUiCursor: NOVRBehaviour
     /// whether moving the cursor also flies the aeroplane.
     /// </summary>
     private static bool SharesStickWithFlight(Rewired.Player player, StickAxisPair pair) =>
-        SharesStick(player, pair, StickAxisPair.FlightPair, unknown: false);
+        SharesStick(player, pair, StickAxisPair.FlightPair, unknown: false, ignoreKeyboard: true);
 
     /// <summary>
     /// Re-read the bindings occasionally rather than every frame — the

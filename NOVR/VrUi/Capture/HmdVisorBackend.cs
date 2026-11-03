@@ -803,9 +803,13 @@ public class HmdVisorBackend : NOVRBehaviour
         if (centre.sqrMagnitude < 1f) return;   // dead centre: no outward direction to take
 
         var direction = centre.normalized;
-        var maxDistance = Mathf.Max(0f, Mathf.Min(
+        // Negative when the element already sticks out of the capture, so the
+        // spread pulls it back in. The capture is always 1920 wide but the HMD
+        // rect follows the player's `hmdWidth`, and a rect wider than the capture
+        // leaves anything anchored to its corners off the panel entirely.
+        var maxDistance = Mathf.Min(
             Allowance(direction.x, min.x, max.x, _targetWidth * 0.5f),
-            Allowance(direction.y, min.y, max.y, _targetHeight * 0.5f)));
+            Allowance(direction.y, min.y, max.y, _targetHeight * 0.5f));
 
         _spreadTargets.Add(new SpreadTarget
         {
@@ -818,8 +822,11 @@ public class HmdVisorBackend : NOVRBehaviour
             SavedSiblingIndex = rect.GetSiblingIndex(),
         });
 
-        Debug.Log($"[NOVR] HMD spread: {label} can move {maxDistance:F0} px outwards " +
-                  $"before it leaves the capture.");
+        Debug.Log(maxDistance < 0f
+            ? $"[NOVR] HMD spread: {label} sticks out of the capture, moving it {-maxDistance:F0} px inwards " +
+              $"(HMD rect {_hmdRect!.rect.width:F0}x{_hmdRect.rect.height:F0}, capture {_targetWidth}x{_targetHeight})."
+            : $"[NOVR] HMD spread: {label} can move {maxDistance:F0} px outwards " +
+              $"before it leaves the capture.");
     }
 
     /// <summary>
