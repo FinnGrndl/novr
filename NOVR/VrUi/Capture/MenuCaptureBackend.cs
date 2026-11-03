@@ -564,6 +564,24 @@ public class MenuCaptureBackend : NOVRBehaviour
         return true;
     }
 
+    /// <summary>The inverse of <see cref="TryGetScreenPoint"/>: the panel surface
+    /// point showing a given screen pixel.</summary>
+    public static bool TryGetWorldPoint(Vector2 screenPoint, out Vector3 worldPoint)
+    {
+        worldPoint = Vector3.zero;
+        if (!IsActive || _instance?._panelRect == null) return false;
+
+        var rect = _instance._panelRect;
+        var size = rect.rect.size;
+        if (size.x <= 0f || size.y <= 0f) return false;
+
+        worldPoint = rect.TransformPoint(new Vector3(
+            (Mathf.Clamp01(screenPoint.x / Screen.width) - 0.5f) * size.x,
+            (Mathf.Clamp01(screenPoint.y / Screen.height) - 0.5f) * size.y,
+            0f));
+        return true;
+    }
+
     /// <summary>Distance from a ray origin to the panel plane, so the cursor
     /// can sit on the panel rather than at its default projection distance.</summary>
     public static bool TryGetPanelDistance(Vector3 origin, Vector3 direction, out float distance)

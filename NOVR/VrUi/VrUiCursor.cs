@@ -457,6 +457,17 @@ public class VrUiCursor: NOVRBehaviour
                 pointerPosition = mouse.position.ReadValue();
             }
 
+            // IMGUI hit-tests and draws hover at the OS pointer, so with the F1
+            // window open the cursor has to sit exactly on that pixel of the panel.
+            // The angular projection below only roughly agrees with it.
+            if (Capture.ImguiCapture.WindowOpen &&
+                Capture.MenuCaptureBackend.TryGetWorldPoint(pointerPosition, out var panelPoint))
+            {
+                _cursor.transform.position = panelPoint;
+                _cursor.transform.rotation = Quaternion.LookRotation(panelPoint - camera.transform.position, camera.transform.up);
+                return;
+            }
+
             float cursorPitch = ProjectPitchAngle(pointerPosition.y);
             float cursorYaw = ProjectYawAngle(pointerPosition.x);
 

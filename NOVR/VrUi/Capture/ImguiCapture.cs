@@ -165,8 +165,9 @@ internal static class ImguiCapture
     internal static void RemapInput(Event e)
     {
         if (!_windowOpen || !MenuCaptureBackend.IsActive) return;
-        if (!e.isMouse && e.type != EventType.ScrollWheel) return;
 
+        // Every event type, not just clicks: Layout and Repaint use the position too,
+        // for hover highlights and for which control a click is about to land on.
         var cursor = VrUiCursor.I;
         if (cursor == null) return;
 
@@ -252,10 +253,10 @@ internal class ImguiCaptureBegin : NOVRBehaviour
     {
         GUI.depth = int.MaxValue;
         var e = Event.current;
-        if (e.type == EventType.Repaint) ImguiCapture.BeginRepaint();
         // Input order is the reverse of Repaint order; remapping is idempotent,
         // so both ends do it and whichever runs first wins.
-        else ImguiCapture.RemapInput(e);
+        ImguiCapture.RemapInput(e);
+        if (e.type == EventType.Repaint) ImguiCapture.BeginRepaint();
     }
 }
 
