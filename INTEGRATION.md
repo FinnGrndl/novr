@@ -37,6 +37,20 @@ darunter. Die Reihenfolge von unten nach oben:
 2. `codex/near-tree-detail` — zusätzlich gemerged, konfliktfrei. Echte 3D-Bäume in der Nähe
    statt gekreuzter Flächen. **Standardmäßig aus**: `[...] Near Trees = true` in der Config setzen.
 
+## Fixes aus dem ersten Test (2026-11-03)
+
+| Commit | Problem | Fix |
+|---|---|---|
+| `afa7cb8` | Build bricht gegen Nuclear Option 0.34 ab (`MissionsPicker`, `QuickLoadMany`, Workshop-`Tag`) | an die neue API angepasst, `MissionQuickLoadHelper` baut `QuickLoadMany` auf `QuickLoadOne` nach |
+| `7c34aa4`, `b83eb64` | Gras und Bäume nur in einem Kegel vor dem Piloten | GPU-Culling nutzt das Sichtfeld beider Augen plus 10° Rand statt des Monitor-Frustums |
+| `b83eb64` | ~250 Fehler/s „RenderTexture.Create failed“, Hänger | Capture-Ziele bekommen einen 24-Bit-Tiefenpuffer |
+| `b83eb64` | Patcher bricht an gesperrter `Unity.XR.Management.dll` ab, XR-Dateien veralten | identische Dateien überspringen, gesperrte Dateien auslassen statt abbrechen |
+| `0f359d6` | Waffenanzeige und Minimap fehlen bei HMD-Breite > 1920 px | herausragende Elemente werden in die Aufnahme zurückgezogen |
+| `0f359d6` | Stick lenkt bei offener Karte nicht | reine Tastatur-Überschneidung sperrt die Flugachsen nicht mehr |
+| `1ee5bb3`, `ae8fed7` | F1 Configuration Manager nur auf dem Monitor | IMGUI wird auf das Menü-Panel im Headset umgeleitet, VR-Cursor 1:1, VR-Klick per `SendInput` |
+
+Bekannt: `Captured HMD Panel Shading` (Standard 0,65) erzeugt schwarze Schlieren um Minimap und Waffenanzeige; mit 0 sind sie weg. Die Hinterlegung müsste auf die Form der Hintergrund-Sprites beschnitten werden.
+
 ## Was bewusst NICHT gemerged ist
 
 | Branch | Grund |
