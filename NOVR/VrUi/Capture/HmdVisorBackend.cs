@@ -298,10 +298,13 @@ public class HmdVisorBackend : NOVRBehaviour
         camera.allowHDR = false;
         camera.allowMSAA = false;
         camera.useOcclusionCulling = false;
+        camera.cullingMask = LayerHelper.CaptureIslandCullingMask;
 
         var data = go.AddComponent<UniversalAdditionalCameraData>();
         data.renderType = CameraRenderType.Base;
         data.renderPostProcessing = false;
+        // Draws UI into a texture: it never needs a shadow pass of its own.
+        data.renderShadows = false;
         data.requiresColorOption = CameraOverrideOption.Off;
         data.requiresDepthOption = CameraOverrideOption.Off;
 
@@ -487,11 +490,11 @@ public class HmdVisorBackend : NOVRBehaviour
         ShadePanel(panel);
 
         var aspect = (float)_targetWidth / _targetHeight;
-        panel.Rect.sizeDelta = new Vector2(PanelCanvasReferenceWidth, PanelCanvasReferenceWidth / aspect);
+        panel.Rect.SetSizeDeltaIfChanged(new Vector2(PanelCanvasReferenceWidth, PanelCanvasReferenceWidth / aspect));
         var scale = widthMeters / PanelCanvasReferenceWidth;
-        panel.Rect.localScale = new Vector3(scale, scale, scale);
-        panel.Rect.localPosition = new Vector3(0f, 0f, distance);
-        panel.Rect.localRotation = Quaternion.identity;
+        panel.Rect.SetLocalScaleIfChanged(new Vector3(scale, scale, scale));
+        panel.Rect.SetLocalPositionIfChanged(new Vector3(0f, 0f, distance));
+        panel.Rect.SetLocalRotationIfChanged(Quaternion.identity);
     }
 
     /// <summary>
@@ -557,13 +560,13 @@ public class HmdVisorBackend : NOVRBehaviour
     {
         if (_lockedHolder == null || _hmdRect == null) return;
 
-        _lockedHolder.anchorMin = _hmdRect.anchorMin;
-        _lockedHolder.anchorMax = _hmdRect.anchorMax;
-        _lockedHolder.pivot = _hmdRect.pivot;
-        _lockedHolder.sizeDelta = _hmdRect.sizeDelta;
-        _lockedHolder.anchoredPosition3D = _hmdRect.anchoredPosition3D;
-        _lockedHolder.localRotation = _hmdRect.localRotation;
-        _lockedHolder.localScale = _hmdRect.localScale;
+        if (_lockedHolder.anchorMin != _hmdRect.anchorMin) _lockedHolder.anchorMin = _hmdRect.anchorMin;
+        if (_lockedHolder.anchorMax != _hmdRect.anchorMax) _lockedHolder.anchorMax = _hmdRect.anchorMax;
+        if (_lockedHolder.pivot != _hmdRect.pivot) _lockedHolder.pivot = _hmdRect.pivot;
+        _lockedHolder.SetSizeDeltaIfChanged(_hmdRect.sizeDelta);
+        if (_lockedHolder.anchoredPosition3D != _hmdRect.anchoredPosition3D) _lockedHolder.anchoredPosition3D = _hmdRect.anchoredPosition3D;
+        _lockedHolder.SetLocalRotationIfChanged(_hmdRect.localRotation);
+        _lockedHolder.SetLocalScaleIfChanged(_hmdRect.localScale);
     }
 
     /// <summary>
@@ -691,7 +694,7 @@ public class HmdVisorBackend : NOVRBehaviour
             var localDelta = target.Rect.parent != null
                 ? target.Rect.parent.InverseTransformVector(_visorCanvas!.transform.TransformVector(canvasDelta))
                 : canvasDelta;
-            target.Rect.localPosition = target.BasePosition + localDelta;
+            target.Rect.SetLocalPositionIfChanged(target.BasePosition + localDelta);
         }
     }
 

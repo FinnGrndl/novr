@@ -131,6 +131,7 @@ public class Core : MonoBehaviour
             _originalFixedDeltaTime = Time.fixedDeltaTime;
         }
 
+        if (Mathf.Approximately(Time.fixedDeltaTime, _originalFixedDeltaTime)) return;
         if (_refreshRateProperty == null) return;
 
         var headsetRefreshRate = (float)_refreshRateProperty.GetValue(null, null);

@@ -6,7 +6,7 @@ public class NoVrHudBehavior : UIRenderedCanvasBehavior
 {
     private void Update()
     {
-        transform.position = new Vector3(0f, 0f, 1000f);
-        transform.rotation = Quaternion.identity;
+        transform.SetPositionIfChanged(new Vector3(0f, 0f, 1000f));
+        transform.SetRotationIfChanged(Quaternion.identity);
     }
 }

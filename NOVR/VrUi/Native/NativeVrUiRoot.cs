@@ -669,6 +669,11 @@ public class NativeVrUiRoot : NOVRBehaviour
     {
         if (Time.unscaledTime < _nextMainMenuScanTime) return;
 
+        // With the native menu off and its button hidden nothing here reads the
+        // canvas, and the scan below runs twice a second through the whole flight.
+        var config = ModConfiguration.Instance;
+        if (!config.EnableNativeMenuUi.Value && !config.ShowNativeUiButton.Value) return;
+
         _nextMainMenuScanTime = Time.unscaledTime + MainMenuScanIntervalSeconds;
         var mainCanvas = FindMainCanvas();
         if (mainCanvas == _mainCanvas) return;
@@ -681,13 +686,16 @@ public class NativeVrUiRoot : NOVRBehaviour
 
     private static GameObject? FindMainCanvas()
     {
-        var gameObjects = Resources.FindObjectsOfTypeAll<GameObject>();
-        for (var index = 0; index < gameObjects.Length; index++)
+        // Canvases rather than every GameObject: the answer is a canvas anyway, and
+        // a busy multiplayer scene holds vastly more GameObjects, each allocating
+        // a string for its name, with no early exit once the menu scene is gone.
+        var canvases = Resources.FindObjectsOfTypeAll<Canvas>();
+        for (var index = 0; index < canvases.Length; index++)
         {
-            var gameObject = gameObjects[index];
-            if (gameObject.name == "MainCanvas" && gameObject.GetComponent<Canvas>() != null)
+            var canvas = canvases[index];
+            if (canvas.name == "MainCanvas")
             {
-                return gameObject;
+                return canvas.gameObject;
             }
         }
 

@@ -44,15 +44,15 @@ public class NOVRFlightHudBehavior : UIRenderedCanvasBehavior
     
     private void Update()
     {
-        transform.position = new Vector3(0f, 0f, 1000f);
-        transform.rotation = Quaternion.identity;
+        transform.SetPositionIfChanged(new Vector3(0f, 0f, 1000f));
+        transform.SetRotationIfChanged(Quaternion.identity);
 
         // Scale the whole flight HUD (both the HMD center and the cockpit HUD
         // center) instead of only the HMD subtree. Scaling the root also
         // brings the HUD elements closer to the view center, which the game's
         // built-in HUD width/height/side/top settings can then fine tune.
         var hudScale = Mathf.Clamp(ModConfiguration.Instance.VrHudScale.Value, 0.25f, 1.5f);
-        transform.localScale = Vector3.one * hudScale;
+        transform.SetLocalScaleIfChanged(Vector3.one * hudScale);
 
         _frameCount++;
         if (_frameCount > 30 && _frameCount % 60 == 0)

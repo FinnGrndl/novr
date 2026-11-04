@@ -1371,6 +1371,10 @@ public class VrUiCursor: NOVRBehaviour
         return Mathf.Max(distance, CursorMinDistanceMeters);
     }
 
+    private PointerEventData? _distancePointer;
+    private EventSystem? _distancePointerSystem;
+    private readonly List<RaycastResult> _distanceRaycastResults = new();
+
     private bool TryGetUiDistanceUnderCursor(Vector2 screenPos, out float distance, out bool overInteractive)
     {
         distance = default;
@@ -1381,13 +1385,17 @@ public class VrUiCursor: NOVRBehaviour
             return false;
         }
 
-        var pointerEventData = new PointerEventData(EventSystem.current)
+        // Every frame while a cursor is up, so both objects are reused.
+        if (_distancePointer == null || _distancePointerSystem != EventSystem.current)
         {
-            position = screenPos
-        };
+            _distancePointer = new PointerEventData(EventSystem.current);
+            _distancePointerSystem = EventSystem.current;
+        }
+        _distancePointer.position = screenPos;
 
-        var results = new List<RaycastResult>();
-        EventSystem.current.RaycastAll(pointerEventData, results);
+        var results = _distanceRaycastResults;
+        results.Clear();
+        EventSystem.current.RaycastAll(_distancePointer, results);
 
         var camera = UiCamera;
         Vector3 cameraPos = camera != null ? camera.transform.position : Vector3.zero;

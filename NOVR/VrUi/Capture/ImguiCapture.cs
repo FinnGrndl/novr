@@ -247,8 +247,6 @@ internal static class ImguiCapture
 /// <summary>Runs first on Repaint (highest depth): starts the redirect.</summary>
 internal class ImguiCaptureBegin : NOVRBehaviour
 {
-    private void Update() => ImguiCapture.Tick();
-
     private void OnGUI()
     {
         GUI.depth = int.MaxValue;
