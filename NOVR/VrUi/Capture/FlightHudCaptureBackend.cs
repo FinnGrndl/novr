@@ -104,6 +104,7 @@ public class FlightHudCaptureBackend : NOVRBehaviour
     private const string HudCanvasName = "HUDCanvas";
     private const float PanelCanvasReferenceWidth = 1000f;
     private const float RebindInterval = 0.5f;
+    private const float FullRebindInterval = 5f;
     // Same reason as the menu backend's: the HUD canvas is deactivated for a
     // frame at a time around aircraft changes and respawns, and tearing the
     // target down on the first inactive frame rebuilds it repeatedly.
@@ -118,6 +119,7 @@ public class FlightHudCaptureBackend : NOVRBehaviour
     private RawImage? _panelImage;
     private RectTransform? _panelRect;
     private float _nextRebind;
+    private float _nextFullRebind;
     private float _lastWantedCapture;
     private bool _capturing;
     private bool _loggedPlacement;
@@ -167,10 +169,20 @@ public class FlightHudCaptureBackend : NOVRBehaviour
             return;
         }
 
+        // Resources.FindObjectsOfTypeAll walks every loaded Canvas, prefabs
+        // included, and allocates the array; with a busy multiplayer scene that
+        // is a lot to do twice a second for an answer that rarely changes. Look
+        // again quickly only while the cached one is gone or wrong, otherwise
+        // only every few seconds.
         if (Time.unscaledTime >= _nextRebind)
         {
             _nextRebind = Time.unscaledTime + RebindInterval;
-            _hudCanvas = FindHudCanvas();
+            var stale = _hudCanvas == null || !_hudCanvas.gameObject.scene.isLoaded;
+            if (stale || Time.unscaledTime >= _nextFullRebind)
+            {
+                _nextFullRebind = Time.unscaledTime + FullRebindInterval;
+                _hudCanvas = FindHudCanvas();
+            }
         }
 
         // ScreenSpaceOverlay is the load-bearing condition, not a sanity check:

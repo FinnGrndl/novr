@@ -33,6 +33,7 @@ public class MenuCaptureBackend : NOVRBehaviour
     private const string EditorCanvasName = "MenuCanvas";
     private const float PanelCanvasReferenceWidth = 1000f;
     private const float RebindInterval = 0.5f;
+    private const float FullRebindInterval = 5f;
     // The menu canvas is deactivated for a frame at a time by the behaviour
     // patcher and during scene transitions. Tearing the capture down on the
     // first inactive frame meant rebuilding the target, camera and panel three
@@ -62,6 +63,7 @@ public class MenuCaptureBackend : NOVRBehaviour
     // something and teardown said nothing at all.
     private string? _reason;
     private float _nextRebind;
+    private float _nextFullRebind;
     private float _lastWantedCapture;
     private bool _capturing;
     private bool _loggedPassEnqueued;
@@ -110,10 +112,20 @@ public class MenuCaptureBackend : NOVRBehaviour
             return;
         }
 
+        // Resources.FindObjectsOfTypeAll walks every loaded Canvas, prefabs
+        // included, and allocates the array; with a busy multiplayer scene that
+        // is a lot to do twice a second for an answer that rarely changes. Look
+        // again quickly only while the cached one is gone or wrong, otherwise
+        // only every few seconds.
         if (Time.unscaledTime >= _nextRebind)
         {
             _nextRebind = Time.unscaledTime + RebindInterval;
-            _menuCanvas = FindMenuCanvas();
+            var stale = _menuCanvas == null || !_menuCanvas.gameObject.scene.isLoaded || _menuCanvas.name != (IsMissionEditorOpen() ? EditorCanvasName : MenuCanvasName);
+            if (stale || Time.unscaledTime >= _nextFullRebind)
+            {
+                _nextFullRebind = Time.unscaledTime + FullRebindInterval;
+                _menuCanvas = FindMenuCanvas();
+            }
         }
 
         var wantCapture = _menuCanvas != null &&

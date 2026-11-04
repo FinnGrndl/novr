@@ -1,4 +1,4 @@
-using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -46,7 +46,9 @@ public class OffscreenGraphicCuller : MonoBehaviour
     private static readonly Vector3[] Corners = new Vector3[4];
 
     private RectTransform _canvasRect;
-    private Graphic[] _graphics = Array.Empty<Graphic>();
+    // Reused across rescans: a fresh array every second per canvas is steady
+    // garbage on the canvases that carry one graphic per unit.
+    private readonly List<Graphic> _graphics = new();
     private float _nextRescan;
 
     private void Awake()
@@ -61,7 +63,7 @@ public class OffscreenGraphicCuller : MonoBehaviour
         if (Time.unscaledTime >= _nextRescan)
         {
             _nextRescan = Time.unscaledTime + RescanInterval;
-            _graphics = GetComponentsInChildren<Graphic>(true);
+            GetComponentsInChildren(true, _graphics);
         }
 
         var bounds = _canvasRect.rect;
@@ -70,14 +72,23 @@ public class OffscreenGraphicCuller : MonoBehaviour
         bounds.yMin -= Margin;
         bounds.yMax += Margin;
 
-        foreach (var graphic in _graphics)
+        // One matrix for the whole pass instead of an InverseTransformPoint per
+        // corner per graphic: this loop runs over every graphic on the canvas
+        // every frame, and in a busy multiplayer session that is hundreds.
+        var toCanvas = _canvasRect.worldToLocalMatrix;
+
+        for (var index = 0; index < _graphics.Count; index++)
         {
+            var graphic = _graphics[index];
             if (graphic == null) continue;
+            // An inactive graphic draws nothing whatever its cull flag says, and
+            // the next pass after it is enabled sets the flag right.
+            if (!graphic.isActiveAndEnabled) continue;
 
             var renderer = graphic.canvasRenderer;
             if (renderer == null) continue;
 
-            var cull = IsEntirelyOutside(bounds, graphic.rectTransform);
+            var cull = IsEntirelyOutside(bounds, graphic.rectTransform, toCanvas);
 
             // Only write on a change: CanvasRenderer.cull dirties the batch when
             // it is set, even to the value it already had.
@@ -88,7 +99,7 @@ public class OffscreenGraphicCuller : MonoBehaviour
         }
     }
 
-    private bool IsEntirelyOutside(Rect bounds, RectTransform target)
+    private static bool IsEntirelyOutside(Rect bounds, RectTransform target, Matrix4x4 toCanvas)
     {
         if (target == null) return false;
 
@@ -101,7 +112,7 @@ public class OffscreenGraphicCuller : MonoBehaviour
         float minY = float.MaxValue, maxY = float.MinValue;
         for (var i = 0; i < 4; i++)
         {
-            var local = _canvasRect.InverseTransformPoint(Corners[i]);
+            var local = toCanvas.MultiplyPoint3x4(Corners[i]);
             if (local.x < minX) minX = local.x;
             if (local.x > maxX) maxX = local.x;
             if (local.y < minY) minY = local.y;

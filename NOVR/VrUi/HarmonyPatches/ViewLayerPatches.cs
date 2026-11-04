@@ -197,13 +197,30 @@ internal static class ViewLayerPatches
     [HarmonyPatch(typeof(HUDUnitMarker), nameof(HUDUnitMarker.UpdatePosition))]
     private static class UnitMarkerRemapPatch
     {
-        private static readonly FieldInfo? TransformField =
-            AccessTools.Field(typeof(HUDUnitMarker), "_transform");
+        // Runs twice per unit marker per frame, so a compiled field reader
+        // rather than FieldInfo.GetValue (reflection + a cast each call).
+        private static readonly AccessTools.FieldRef<HUDUnitMarker, Transform>? TransformRef = CreateTransformRef();
+
+        private static AccessTools.FieldRef<HUDUnitMarker, Transform>? CreateTransformRef()
+        {
+            try
+            {
+                return AccessTools.FieldRefAccess<HUDUnitMarker, Transform>("_transform");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[NOVR] View icons: HUDUnitMarker._transform not found, unit markers are not remapped: {e.Message}");
+                return null;
+            }
+        }
 
         [HarmonyPrefix]
         private static void Prefix(HUDUnitMarker __instance, out Vector3 __state)
         {
-            var transform = TransformField?.GetValue(__instance) as Transform;
+            __state = Vector3.zero;
+            if (!ViewLayerBackend.IsActive) return;
+
+            var transform = TransformRef != null ? TransformRef(__instance) : null;
             __state = transform != null ? transform.position : Vector3.zero;
         }
 
@@ -217,7 +234,7 @@ internal static class ViewLayerPatches
         {
             if (!ViewLayerBackend.IsActive) return;
 
-            var transform = TransformField?.GetValue(__instance) as Transform;
+            var transform = TransformRef != null ? TransformRef(__instance) : null;
             if (transform == null) return;
 
             var position = transform.position;
