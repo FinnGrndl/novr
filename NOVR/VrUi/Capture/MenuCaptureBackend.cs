@@ -106,6 +106,13 @@ public class MenuCaptureBackend : NOVRBehaviour
 
     private void Update()
     {
+        var perfStart = PerfMonitor.Begin();
+        UpdateCore();
+        PerfMonitor.End(PerfSlot.MenuCapture, perfStart);
+    }
+
+    private void UpdateCore()
+    {
         if (!Enabled)
         {
             if (_capturing) TeardownCapture();

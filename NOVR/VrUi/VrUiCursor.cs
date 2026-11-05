@@ -260,6 +260,13 @@ public class VrUiCursor: NOVRBehaviour
 
     private void Update()
     {
+        var perfStart = PerfMonitor.Begin();
+        UpdateCore();
+        PerfMonitor.End(PerfSlot.Cursor, perfStart);
+    }
+
+    private void UpdateCore()
+    {
         if (!Application.isFocused)
         {
             if (_cursor != null && _cursor.activeSelf)

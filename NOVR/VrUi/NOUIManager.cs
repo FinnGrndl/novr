@@ -68,6 +68,13 @@ public class NOUIManager : NOVRBehaviour
 
     private void Update()
     {
+        var perfStart = PerfMonitor.Begin();
+        UpdateCore();
+        PerfMonitor.End(PerfSlot.UiManager, perfStart);
+    }
+
+    private void UpdateCore()
+    {
         ConfigureUiCameras();
         UpdateSmoothedPosition();
 

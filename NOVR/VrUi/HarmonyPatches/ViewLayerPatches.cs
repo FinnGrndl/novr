@@ -214,9 +214,15 @@ internal static class ViewLayerPatches
             }
         }
 
+        // The span from prefix to postfix is the whole UpdatePosition call,
+        // the game's own work and every other mod's patch included: that is
+        // the per-unit cost the performance log reports as UnitMarkers.
+        private static long _perfStart;
+
         [HarmonyPrefix]
         private static void Prefix(HUDUnitMarker __instance, out Vector3 __state)
         {
+            _perfStart = PerfMonitor.Begin();
             __state = Vector3.zero;
             if (!ViewLayerBackend.IsActive) return;
 
@@ -232,13 +238,19 @@ internal static class ViewLayerPatches
         [HarmonyPostfix]
         private static void Postfix(HUDUnitMarker __instance, Vector3 __state)
         {
+            Remap(__instance, __state);
+            PerfMonitor.End(PerfSlot.UnitMarkers, _perfStart);
+        }
+
+        private static void Remap(HUDUnitMarker marker, Vector3 before)
+        {
             if (!ViewLayerBackend.IsActive) return;
 
-            var transform = TransformRef != null ? TransformRef(__instance) : null;
+            var transform = TransformRef != null ? TransformRef(marker) : null;
             if (transform == null) return;
 
             var position = transform.position;
-            if (position == __state) return;
+            if (position == before) return;
 
             transform.position = ViewLayerBackend.RemapPixels(position);
         }

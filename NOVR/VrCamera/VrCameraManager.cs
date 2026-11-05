@@ -20,7 +20,14 @@ public class VrCameraManager: MonoBehaviour
     
     private Camera[] _cameraBuffer = new Camera[16];
 
-    private void Update() // Todo: Make me behave on events if possible
+    private void Update()
+    {
+        var perfStart = PerfMonitor.Begin();
+        UpdateCore();
+        PerfMonitor.End(PerfSlot.CameraManager, perfStart);
+    }
+
+    private void UpdateCore()
     {
         if (_cameraBuffer.Length < Camera.allCamerasCount)
         {

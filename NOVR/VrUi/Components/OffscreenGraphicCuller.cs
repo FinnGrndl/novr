@@ -58,6 +58,13 @@ public class OffscreenGraphicCuller : MonoBehaviour
 
     private void LateUpdate()
     {
+        var perfStart = PerfMonitor.Begin();
+        LateUpdateCore();
+        PerfMonitor.End(PerfSlot.OffscreenCuller, perfStart);
+    }
+
+    private void LateUpdateCore()
+    {
         if (_canvasRect == null) return;
 
         if (Time.unscaledTime >= _nextRescan)
