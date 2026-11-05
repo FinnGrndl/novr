@@ -47,8 +47,8 @@ public class NOUIManager : NOVRBehaviour
         UIBehaviorPatcher.DoPatching();
         Create<VrUiCursor>(transform);
         Create<MenuCaptureBackend>(transform);
-        Create<ImguiCaptureBegin>(transform);
-        Create<ImguiCaptureEnd>(transform);
+        _imguiBegin = Create<ImguiCaptureBegin>(transform);
+        _imguiEnd = Create<ImguiCaptureEnd>(transform);
         Create<FlightHudCaptureBackend>(transform);
         Create<HmdVisorBackend>(transform);
         Create<ViewLayerBackend>(transform);
@@ -63,10 +63,27 @@ public class NOUIManager : NOVRBehaviour
         ConfigureUiCameras();
     }
 
+    private ImguiCaptureBegin? _imguiBegin;
+    private ImguiCaptureEnd? _imguiEnd;
+
     private void Update()
+    {
+        var perfStart = PerfMonitor.Begin();
+        UpdateCore();
+        PerfMonitor.End(PerfSlot.UiManager, perfStart);
+    }
+
+    private void UpdateCore()
     {
         ConfigureUiCameras();
         UpdateSmoothedPosition();
+
+        // An active OnGUI costs Layout and Repaint events every frame, so these
+        // two only run while the F1 window is open.
+        ImguiCapture.Tick();
+        var imguiOpen = ImguiCapture.WindowOpen;
+        if (_imguiBegin != null && _imguiBegin.enabled != imguiOpen) _imguiBegin.enabled = imguiOpen;
+        if (_imguiEnd != null && _imguiEnd.enabled != imguiOpen) _imguiEnd.enabled = imguiOpen;
     }
     
     private void UpdateSmoothedPosition()
@@ -125,11 +142,13 @@ public class NOUIManager : NOVRBehaviour
     private static void ConfigureUiCamera(Camera camera)
     {
         
-        camera.clearFlags = CameraClearFlags.Depth;
-        camera.backgroundColor = Color.clear;
-        camera.targetTexture = null;
-        camera.nearClipPlane = 0.01f;
-        camera.farClipPlane = 10000f;
-        camera.rect = new Rect(0f, 0f, 1f, 1f);
+        if (camera.clearFlags != CameraClearFlags.Depth) camera.clearFlags = CameraClearFlags.Depth;
+        if (camera.backgroundColor != Color.clear) camera.backgroundColor = Color.clear;
+        if (camera.targetTexture != null) camera.targetTexture = null;
+        if (camera.nearClipPlane != 0.01f) camera.nearClipPlane = 0.01f;
+        if (camera.farClipPlane != 10000f) camera.farClipPlane = 10000f;
+        if (camera.rect != FullViewport) camera.rect = FullViewport;
     }
+
+    private static readonly Rect FullViewport = new(0f, 0f, 1f, 1f);
 }

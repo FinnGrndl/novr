@@ -18,13 +18,26 @@ public class VrCameraManager: MonoBehaviour
 
     public static HashSet<Camera> IgnoredCameras = new();
     
-    private void Update() // Todo: Make me behave on events if possible
-    {
-        Camera[] cameras = new Camera[Camera.allCamerasCount];
-        Camera.GetAllCameras(cameras);
+    private Camera[] _cameraBuffer = new Camera[16];
 
-        foreach (var camera in cameras)
+    private void Update()
+    {
+        var perfStart = PerfMonitor.Begin();
+        UpdateCore();
+        PerfMonitor.End(PerfSlot.CameraManager, perfStart);
+    }
+
+    private void UpdateCore()
+    {
+        if (_cameraBuffer.Length < Camera.allCamerasCount)
         {
+            _cameraBuffer = new Camera[Camera.allCamerasCount * 2];
+        }
+        var cameraCount = Camera.GetAllCameras(_cameraBuffer);
+
+        for (var index = 0; index < cameraCount; index++)
+        {
+            var camera = _cameraBuffer[index];
             var gameObject = camera.gameObject;
             if (gameObject.name is not (NuclearOptionMainCameraName or NuclearOptionMenuCameraName))
             {

@@ -18,6 +18,7 @@ public static class CapturedHmd
 {
     public static ConfigEntry<bool> Visor;
     public static ConfigEntry<float> VisorFieldOfView;
+    public static ConfigEntry<float> CockpitPanelFieldOfView;
     public static ConfigEntry<float> PanelShading;
     public static ConfigEntry<float> PanelSpread;
     public static ConfigEntry<bool> PanelLock;
@@ -45,6 +46,17 @@ public static class CapturedHmd
                 "Horizontal angle the helmet visor panel covers, in degrees. The flat game "
                 + "spreads the HMD readouts across the whole screen; this is how much of your "
                 + "view that screen maps to.",
+                new AcceptableValueRange<float>(30f, 110f)));
+
+        CockpitPanelFieldOfView = config.Bind(
+            "Experimental",
+            "Captured HMD Cockpit Panel Field Of View",
+            70f,
+            new ConfigDescription(
+                "Size of the cockpit-fixed panel with the tactical map and the weapon readout "
+                + "(Captured HMD Panel Lock), as the horizontal angle it would cover straight "
+                + "ahead, in degrees. Separate from the visor's field of view, so a wide visor "
+                + "does not make the map bigger. Takes effect immediately.",
                 new AcceptableValueRange<float>(30f, 110f)));
 
         PanelShading = config.Bind(

@@ -153,15 +153,25 @@ public class HmdVisorBackend : NOVRBehaviour
     private void OnDestroy()
     {
         if (ReferenceEquals(_instance, this)) _instance = null;
-        Teardown();
+        Teardown("NOVR is shutting down");
     }
 
     private void Update()
     {
-        var want = FlightHudCaptureBackend.IsActive && (CapturedHmd.Visor?.Value ?? true);
+        var perfStart = PerfMonitor.Begin();
+        UpdateCore();
+        PerfMonitor.End(PerfSlot.HmdVisor, perfStart);
+    }
+
+    private void UpdateCore()
+    {
+        // Keyed on the capture existing, not on it showing: while the flight HUD
+        // is suspended (map maximized, a menu up) the visor is hidden rather
+        // than torn down, so the map does not cost a rebuild of both captures.
+        var want = FlightHudCaptureBackend.IsCapturing && (CapturedHmd.Visor?.Value ?? true);
         if (!want)
         {
-            if (_active) Teardown();
+            if (_active) Teardown(FlightHudCaptureBackend.IsCapturing ? "the visor setting is off" : "the flight HUD capture ended");
             return;
         }
 
@@ -173,12 +183,27 @@ public class HmdVisorBackend : NOVRBehaviour
 
         if (_hmdRect == null)
         {
-            if (_active) Teardown();
+            if (_active) Teardown("the helmet display is gone");
             return;
         }
 
         if (!_active) Setup();
-        Maintain();
+
+        var visible = FlightHudCaptureBackend.IsActive;
+        ApplyVisibility(visible);
+        if (visible) Maintain();
+    }
+
+    /// <summary>
+    /// Show or hide everything this backend draws without rebuilding any of
+    /// it: the island cameras stop rendering and the panels go dark.
+    /// </summary>
+    private void ApplyVisibility(bool visible)
+    {
+        if (_visorCamera != null && _visorCamera.enabled != visible) _visorCamera.enabled = visible;
+        if (_lockedCamera != null && _lockedCamera.enabled != visible) _lockedCamera.enabled = visible;
+        if (_panel?.Canvas != null && _panel.Canvas.enabled != visible) _panel.Canvas.enabled = visible;
+        if (_lockedPanel?.Canvas != null && _lockedPanel.Canvas.enabled != visible) _lockedPanel.Canvas.enabled = visible;
     }
 
     private static RectTransform? FindHmdRect()
@@ -212,8 +237,9 @@ public class HmdVisorBackend : NOVRBehaviour
                   $"{_targetWidth}x{_targetHeight} pixel-true capture.");
     }
 
-    private void Teardown()
+    private void Teardown(string reason)
     {
+        if (_active) Debug.Log($"[NOVR] HMD visor torn down: {reason}.");
         _active = false;
 
         // Put the two spread elements back before the subtree goes home, or the
@@ -298,10 +324,13 @@ public class HmdVisorBackend : NOVRBehaviour
         camera.allowHDR = false;
         camera.allowMSAA = false;
         camera.useOcclusionCulling = false;
+        camera.cullingMask = LayerHelper.CaptureIslandCullingMask;
 
         var data = go.AddComponent<UniversalAdditionalCameraData>();
         data.renderType = CameraRenderType.Base;
         data.renderPostProcessing = false;
+        // Draws UI into a texture: it never needs a shadow pass of its own.
+        data.renderShadows = false;
         data.requiresColorOption = CameraOverrideOption.Off;
         data.requiresDepthOption = CameraOverrideOption.Off;
 
@@ -442,7 +471,7 @@ public class HmdVisorBackend : NOVRBehaviour
         if (_hmdRect == null || _visorCanvas == null ||
             _hmdRect.parent != _visorCanvas.transform)
         {
-            Teardown();
+            Teardown("the helmet display left the visor canvas");
             return;
         }
 
@@ -463,7 +492,13 @@ public class HmdVisorBackend : NOVRBehaviour
         SpreadPanels(fovDegrees);
 
         PlacePanel(_panel, distance, widthMeters);
-        if (_lockedPanel != null) PlacePanel(_lockedPanel, distance, widthMeters);
+        if (_lockedPanel != null)
+        {
+            // The cockpit panel has its own size: it is fixed in the cockpit, so
+            // widening the head-locked visor must not blow the map up with it.
+            var lockedFov = Mathf.Clamp(CapturedHmd.CockpitPanelFieldOfView?.Value ?? 70f, 30f, 110f);
+            PlacePanel(_lockedPanel, distance, 2f * distance * Mathf.Tan(lockedFov * 0.5f * Mathf.Deg2Rad));
+        }
 
         if (_loggedPlacement) return;
         _loggedPlacement = true;
@@ -487,11 +522,11 @@ public class HmdVisorBackend : NOVRBehaviour
         ShadePanel(panel);
 
         var aspect = (float)_targetWidth / _targetHeight;
-        panel.Rect.sizeDelta = new Vector2(PanelCanvasReferenceWidth, PanelCanvasReferenceWidth / aspect);
+        panel.Rect.SetSizeDeltaIfChanged(new Vector2(PanelCanvasReferenceWidth, PanelCanvasReferenceWidth / aspect));
         var scale = widthMeters / PanelCanvasReferenceWidth;
-        panel.Rect.localScale = new Vector3(scale, scale, scale);
-        panel.Rect.localPosition = new Vector3(0f, 0f, distance);
-        panel.Rect.localRotation = Quaternion.identity;
+        panel.Rect.SetLocalScaleIfChanged(new Vector3(scale, scale, scale));
+        panel.Rect.SetLocalPositionIfChanged(new Vector3(0f, 0f, distance));
+        panel.Rect.SetLocalRotationIfChanged(Quaternion.identity);
     }
 
     /// <summary>
@@ -511,6 +546,16 @@ public class HmdVisorBackend : NOVRBehaviour
     private void ApplyPanelLock()
     {
         if (!(CapturedHmd.PanelLock?.Value ?? true))
+        {
+            ReleaseLockedPanels();
+            return;
+        }
+
+        // Nothing to move, nothing to capture. Without this, an HMD in which
+        // neither the weapon readout nor the map anchor could be found built
+        // the second capture here and had it torn down again by the next
+        // resolve, a render target and a camera churned over and over.
+        if (_spreadTargets.Count == 0)
         {
             ReleaseLockedPanels();
             return;
@@ -557,13 +602,13 @@ public class HmdVisorBackend : NOVRBehaviour
     {
         if (_lockedHolder == null || _hmdRect == null) return;
 
-        _lockedHolder.anchorMin = _hmdRect.anchorMin;
-        _lockedHolder.anchorMax = _hmdRect.anchorMax;
-        _lockedHolder.pivot = _hmdRect.pivot;
-        _lockedHolder.sizeDelta = _hmdRect.sizeDelta;
-        _lockedHolder.anchoredPosition3D = _hmdRect.anchoredPosition3D;
-        _lockedHolder.localRotation = _hmdRect.localRotation;
-        _lockedHolder.localScale = _hmdRect.localScale;
+        if (_lockedHolder.anchorMin != _hmdRect.anchorMin) _lockedHolder.anchorMin = _hmdRect.anchorMin;
+        if (_lockedHolder.anchorMax != _hmdRect.anchorMax) _lockedHolder.anchorMax = _hmdRect.anchorMax;
+        if (_lockedHolder.pivot != _hmdRect.pivot) _lockedHolder.pivot = _hmdRect.pivot;
+        _lockedHolder.SetSizeDeltaIfChanged(_hmdRect.sizeDelta);
+        if (_lockedHolder.anchoredPosition3D != _hmdRect.anchoredPosition3D) _lockedHolder.anchoredPosition3D = _hmdRect.anchoredPosition3D;
+        _lockedHolder.SetLocalRotationIfChanged(_hmdRect.localRotation);
+        _lockedHolder.SetLocalScaleIfChanged(_hmdRect.localScale);
     }
 
     /// <summary>
@@ -691,7 +736,7 @@ public class HmdVisorBackend : NOVRBehaviour
             var localDelta = target.Rect.parent != null
                 ? target.Rect.parent.InverseTransformVector(_visorCanvas!.transform.TransformVector(canvasDelta))
                 : canvasDelta;
-            target.Rect.localPosition = target.BasePosition + localDelta;
+            target.Rect.SetLocalPositionIfChanged(target.BasePosition + localDelta);
         }
     }
 
@@ -699,6 +744,11 @@ public class HmdVisorBackend : NOVRBehaviour
     {
         if (_spreadTargets.Count == 0 || _spreadTargets.Exists(t => t.Rect == null))
         {
+            // Rate-limited when there was nothing to find last time: resolving
+            // walks the HMD subtree and logs, and an HMD without either element
+            // would otherwise do both on every frame.
+            if (_spreadTargets.Count == 0 && Time.unscaledTime < _nextSpreadRetry) return;
+            _nextSpreadRetry = Time.unscaledTime + RebindInterval;
             ResolveSpreadTargets();
             return;
         }
