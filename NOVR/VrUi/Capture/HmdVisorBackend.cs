@@ -492,7 +492,13 @@ public class HmdVisorBackend : NOVRBehaviour
         SpreadPanels(fovDegrees);
 
         PlacePanel(_panel, distance, widthMeters);
-        if (_lockedPanel != null) PlacePanel(_lockedPanel, distance, widthMeters);
+        if (_lockedPanel != null)
+        {
+            // The cockpit panel has its own size: it is fixed in the cockpit, so
+            // widening the head-locked visor must not blow the map up with it.
+            var lockedFov = Mathf.Clamp(CapturedHmd.CockpitPanelFieldOfView?.Value ?? 70f, 30f, 110f);
+            PlacePanel(_lockedPanel, distance, 2f * distance * Mathf.Tan(lockedFov * 0.5f * Mathf.Deg2Rad));
+        }
 
         if (_loggedPlacement) return;
         _loggedPlacement = true;
